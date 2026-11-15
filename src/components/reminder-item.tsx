@@ -1,6 +1,6 @@
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-import { formatRadius, getCategoryLabel } from "@/constants/categories";
+import { formatRadius, getCategoryLabels } from "@/constants/categories";
 import { Reminder } from "@/types/reminder";
 
 interface Props {
@@ -13,10 +13,10 @@ interface Props {
 export function ReminderItem({ reminder, onToggleDone, onPress, onDelete }: Props) {
   const isDone = reminder.status === "done";
 
+  const chosen = reminder.places.length;
   const place =
-    reminder.mode === "favorite"
-      ? `📍 ${reminder.placeName}`
-      : `🔎 ${getCategoryLabel(reminder.category)} à proximité`;
+    `🔎 ${getCategoryLabels(reminder.categories) || "Commerces"} à proximité` +
+    (chosen > 0 ? ` (${chosen} choisi${chosen > 1 ? "s" : ""})` : "");
 
   return (
     <View style={styles.card}>

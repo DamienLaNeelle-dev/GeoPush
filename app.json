@@ -40,6 +40,7 @@
         {
           "locationAlwaysAndWhenInUsePermission": "GeoPush utilise ta position en arrière-plan pour te rappeler tes tâches quand tu passes près d'un lieu.",
           "locationWhenInUsePermission": "GeoPush utilise ta position pour afficher les lieux proches de toi.",
+          "locationWhenInUsePermissionPurpose": "Nous utilisons votre position pour trouver les commerces proches.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true

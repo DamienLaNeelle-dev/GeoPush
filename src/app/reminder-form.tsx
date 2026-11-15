@@ -1,6 +1,7 @@
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -12,16 +13,20 @@ import {
   View,
 } from "react-native";
 
+import { PlaceList } from "@/components/place-list";
 import {
   CATEGORIES,
   CategoryKey,
+  MAX_PLACES,
   RADIUS_OPTIONS,
   formatRadius,
 } from "@/constants/categories";
 import { useAuth } from "@/context/AuthContext";
+import { usePlaceSearch } from "@/hooks/use-place-search";
 import { useReminders } from "@/hooks/use-reminders";
 import { createReminder, updateReminder } from "@/services/reminders/reminderService";
-import { ReminderMode } from "@/types/reminder";
+import { Place, SavedPlace } from "@/types/place";
+import { ReminderInput } from "@/types/reminder";
 
 function Chip({
   label,
@@ -47,13 +52,14 @@ export default function ReminderFormScreen() {
   const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { reminders } = useReminders();
+  const { places, loading: searching, error: searchError, searched, search, reset } =
+    usePlaceSearch();
 
   const isEdit = !!id;
 
   const [title, setTitle] = useState("");
-  const [mode, setMode] = useState<ReminderMode>("favorite");
-  const [placeName, setPlaceName] = useState("");
-  const [category, setCategory] = useState<CategoryKey | null>(null);
+  const [categories, setCategories] = useState<CategoryKey[]>([]);
+  const [chosenPlaces, setChosenPlaces] = useState<SavedPlace[]>([]); // commerces cochés
   const [radius, setRadius] = useState<number>(500);
 
   // En modification : on pré-remplit le formulaire une seule fois.
@@ -64,9 +70,8 @@ export default function ReminderFormScreen() {
     if (!existing) return;
 
     setTitle(existing.title);
-    setMode(existing.mode);
-    setPlaceName(existing.placeName ?? "");
-    setCategory(existing.category);
+    setCategories(existing.categories);
+    setChosenPlaces(existing.places);
     setRadius(existing.radius);
     prefilled.current = true;
   }, [isEdit, id, reminders]);
@@ -75,27 +80,64 @@ export default function ReminderFormScreen() {
     return <Redirect href="/login" />;
   }
 
+  const toggleCategory = (key: CategoryKey) => {
+    const removing = categories.includes(key);
+    setCategories(removing ? categories.filter((k) => k !== key) : [...categories, key]);
+    // Si on décoche une catégorie, on retire aussi les commerces choisis de cette catégorie.
+    if (removing) setChosenPlaces((prev) => prev.filter((p) => p.category !== key));
+    reset(); // les anciens résultats ne correspondent plus
+  };
+
+  const handleSearch = () => {
+    if (categories.length === 0) {
+      Alert.alert("Erreur", "Choisissez au moins une catégorie de commerce.");
+      return;
+    }
+    search(categories);
+  };
+
+  // Coche / décoche un commerce dans la liste.
+  const handleTogglePlace = (place: Place) => {
+    if (chosenPlaces.some((p) => p.id === place.id)) {
+      setChosenPlaces((prev) => prev.filter((p) => p.id !== place.id));
+      return;
+    }
+
+    if (chosenPlaces.length >= MAX_PLACES) {
+      Alert.alert("Limite atteinte", `Vous pouvez choisir ${MAX_PLACES} commerces au maximum.`);
+      return;
+    }
+
+    const { distance, ...saved } = place;
+    setChosenPlaces((prev) => [...prev, saved]);
+  };
+
+  const handleSelectAll = () => {
+    const merged = [...chosenPlaces];
+    for (const place of places) {
+      if (merged.length >= MAX_PLACES) break;
+      if (!merged.some((p) => p.id === place.id)) {
+        const { distance, ...saved } = place;
+        merged.push(saved);
+      }
+    }
+    setChosenPlaces(merged);
+  };
+
   const handleSave = () => {
     if (!title.trim()) {
       Alert.alert("Erreur", "Donnez un titre à votre rappel.");
       return;
     }
-    if (mode === "favorite" && !placeName.trim()) {
-      Alert.alert("Erreur", "Indiquez le nom de votre commerce favori.");
-      return;
-    }
-    if (mode === "nearby" && !category) {
-      Alert.alert("Erreur", "Choisissez une catégorie de commerce.");
+    if (categories.length === 0) {
+      Alert.alert("Erreur", "Choisissez au moins une catégorie de commerce.");
       return;
     }
 
-    const input = {
+    const input: ReminderInput = {
       title: title.trim(),
-      mode,
-      placeName: mode === "favorite" ? placeName.trim() : null,
-      latitude: null, // sera renseigné quand on ajoutera le choix du lieu sur carte
-      longitude: null,
-      category: mode === "nearby" ? category : null,
+      categories,
+      places: chosenPlaces,
       radius,
     };
 
@@ -126,40 +168,74 @@ export default function ReminderFormScreen() {
           onChangeText={setTitle}
         />
 
-        <Text style={styles.label}>Mode de localisation</Text>
+        <Text style={styles.label}>Que recherchez-vous ?</Text>
+        <Text style={styles.hint}>
+          Ex : pour du pain, cochez Boulangerie et Supermarché. Lancez la recherche, puis touchez
+          les commerces à surveiller (20 maximum). Si vous n'en choisissez aucun, tous les
+          commerces de ces catégories autour de vous seront surveillés.
+        </Text>
+
         <View style={styles.row}>
-          <Chip
-            label="Commerce favori"
-            selected={mode === "favorite"}
-            onPress={() => setMode("favorite")}
-          />
-          <Chip
-            label="À proximité"
-            selected={mode === "nearby"}
-            onPress={() => setMode("nearby")}
-          />
+          {CATEGORIES.map((c) => (
+            <Chip
+              key={c.key}
+              label={c.label}
+              selected={categories.includes(c.key)}
+              onPress={() => toggleCategory(c.key)}
+            />
+          ))}
         </View>
 
-        {mode === "favorite" ? (
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={handleSearch}
+          disabled={searching}
+        >
+          {searching ? (
+            <ActivityIndicator />
+          ) : (
+            <Text style={styles.secondaryButtonText}>Rechercher autour de moi</Text>
+          )}
+        </TouchableOpacity>
+
+        {searchError && <Text style={styles.error}>{searchError}</Text>}
+
+        {searched && places.length === 0 && (
+          <Text style={styles.hint}>Aucun commerce trouvé dans un rayon de 3 km.</Text>
+        )}
+
+        {places.length > 0 && (
           <>
-            <Text style={styles.label}>Nom du commerce</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ex : Boulangerie Dupont"
-              value={placeName}
-              onChangeText={setPlaceName}
+            <Text style={styles.hint}>
+              {places.length} commerce{places.length > 1 ? "s" : ""} (maximum {MAX_PLACES}, du plus
+              proche au plus lointain) — touchez pour cocher :
+            </Text>
+
+            <TouchableOpacity onPress={handleSelectAll} style={{ marginBottom: 10 }}>
+              <Text style={styles.link}>Tout sélectionner</Text>
+            </TouchableOpacity>
+
+            <PlaceList
+              places={places}
+              onSelect={handleTogglePlace}
+              selectedIds={chosenPlaces.map((p) => p.id)}
             />
           </>
-        ) : (
+        )}
+
+        {chosenPlaces.length > 0 && (
           <>
-            <Text style={styles.label}>Catégorie de commerce</Text>
+            <Text style={styles.label}>
+              Commerces choisis ({chosenPlaces.length}/{MAX_PLACES})
+            </Text>
+            <Text style={styles.hint}>Touchez un commerce pour le retirer.</Text>
             <View style={styles.row}>
-              {CATEGORIES.map((c) => (
+              {chosenPlaces.map((p) => (
                 <Chip
-                  key={c.key}
-                  label={c.label}
-                  selected={category === c.key}
-                  onPress={() => setCategory(c.key)}
+                  key={p.id}
+                  label={`${p.name}  ✕`}
+                  selected
+                  onPress={() => setChosenPlaces((prev) => prev.filter((x) => x.id !== p.id))}
                 />
               ))}
             </View>
@@ -191,9 +267,12 @@ export default function ReminderFormScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 25, paddingTop: 30 },
+  container: { padding: 25, paddingTop: 30, paddingBottom: 60 },
   screenTitle: { fontSize: 26, fontWeight: "bold", marginBottom: 25 },
-  label: { fontSize: 14, fontWeight: "600", marginBottom: 8, marginTop: 10 },
+  label: { fontSize: 14, fontWeight: "600", marginBottom: 8, marginTop: 14 },
+  hint: { fontSize: 13, color: "#777777", marginBottom: 10 },
+  error: { fontSize: 13, color: "#D64545", marginBottom: 10 },
+  link: { color: "#5B4BDB", fontWeight: "600" },
   input: {
     height: 55,
     borderWidth: 1,
@@ -213,6 +292,16 @@ const styles = StyleSheet.create({
   chipSelected: { backgroundColor: "#5B4BDB", borderColor: "#5B4BDB" },
   chipText: { color: "#333333" },
   chipTextSelected: { color: "#FFFFFF", fontWeight: "600" },
+  secondaryButton: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: "#5B4BDB",
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  secondaryButtonText: { color: "#5B4BDB", fontWeight: "600" },
   button: {
     height: 55,
     backgroundColor: "#5B4BDB",

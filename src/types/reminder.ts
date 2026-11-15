@@ -1,30 +1,24 @@
 import { CategoryKey } from "@/constants/categories";
+import { SavedPlace } from "@/types/place";
 
-export type ReminderMode = "favorite" | "nearby";
 export type ReminderStatus = "active" | "done";
 
 export interface Reminder {
   id: string;
   title: string;
-  mode: ReminderMode;
 
-  // Mode "favorite" : le commerce habituel de l'utilisateur.
-  // Les coordonnées seront remplies à l'étape carte / géolocalisation.
-  placeName: string | null;
-  latitude: number | null;
-  longitude: number | null;
+  // Catégories de commerces à rechercher autour de l'utilisateur (ex. boulangerie, supermarché).
+  categories: CategoryKey[];
 
-  // Mode "nearby" : catégorie de commerce à rechercher autour de l'utilisateur.
-  category: CategoryKey | null;
+  // Commerces précis choisis dans la liste (facultatif, 20 maximum).
+  // Liste vide = tous les commerces des catégories autour de l'utilisateur.
+  places: SavedPlace[];
 
-  radius: number; // mètres
+  radius: number; // rayon de déclenchement, en mètres
   status: ReminderStatus;
   createdAt: number; // Date.now()
   completedAt: number | null;
 }
 
 // Ce que le formulaire fournit (le reste est géré par le service).
-export type ReminderInput = Pick<
-  Reminder,
-  "title" | "mode" | "placeName" | "latitude" | "longitude" | "category" | "radius"
->;
+export type ReminderInput = Pick<Reminder, "title" | "categories" | "places" | "radius">;

@@ -14,6 +14,14 @@ export type CategoryKey = (typeof CATEGORIES)[number]["key"];
 export const getCategoryLabel = (key: CategoryKey | null): string =>
   CATEGORIES.find((c) => c.key === key)?.label ?? "";
 
+export const getCategoryLabels = (keys: CategoryKey[]): string =>
+  keys.map((k) => getCategoryLabel(k)).join(", ");
+
+// Recherche de commerces : rayon de recherche autour de l'utilisateur (mètres)
+// et nombre maximum de commerces retenus.
+export const SEARCH_RADIUS = 3000;
+export const MAX_PLACES = 20;
+
 // Rayons de déclenchement proposés (en mètres).
 export const RADIUS_OPTIONS = [100, 250, 500, 1000, 2000] as const;
 
