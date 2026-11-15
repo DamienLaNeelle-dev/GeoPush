@@ -62,9 +62,6 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Mes rappels</Text>
-        <TouchableOpacity onPress={handleLogout}>
-          <Text style={styles.logout}>Se déconnecter</Text>
-        </TouchableOpacity>
       </View>
 
       <View style={styles.tabs}>

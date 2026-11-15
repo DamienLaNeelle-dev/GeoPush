@@ -2,6 +2,7 @@ import { Stack } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { ReminderDraftProvider } from "@/context/ReminderDraftContext";
 
 function RootNavigator() {
   const { loading } = useAuth();
@@ -18,6 +19,7 @@ function RootNavigator() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="reminder-form" options={{ presentation: "modal" }} />
+      <Stack.Screen name="place-map" options={{ presentation: "fullScreenModal" }} />
     </Stack>
   );
 }
@@ -25,7 +27,9 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <RootNavigator />
+      <ReminderDraftProvider>
+        <RootNavigator />
+      </ReminderDraftProvider>
     </AuthProvider>
   );
 }
