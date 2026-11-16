@@ -1,0 +1,2 @@
+installation firebase 
+npx expo install expo-location
