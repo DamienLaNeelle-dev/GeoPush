@@ -40,7 +40,6 @@
         {
           "locationAlwaysAndWhenInUsePermission": "GeoPush utilise ta position en arrière-plan pour te rappeler tes tâches quand tu passes près d'un lieu.",
           "locationWhenInUsePermission": "GeoPush utilise ta position pour afficher les lieux proches de toi.",
-          "locationWhenInUsePermissionPurpose": "Nous utilisons votre position pour trouver les commerces proches.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
@@ -54,6 +53,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "owner": "ynov-webmobile",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f878d3b1-f24d-4273-a055-54c122f8d719"
+      }
     }
   }
 }
