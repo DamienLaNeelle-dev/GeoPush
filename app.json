@@ -53,6 +53,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "owner": "ynov-webmobile",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f878d3b1-f24d-4273-a055-54c122f8d719"
+      }
     }
   }
 }
