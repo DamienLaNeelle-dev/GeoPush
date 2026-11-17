@@ -62,6 +62,9 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Mes rappels</Text>
+        <TouchableOpacity onPress={() => router.push("/notifications")}>
+          <Text style={styles.notificationsLink}>Notifications</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.tabs}>
@@ -128,6 +131,7 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 30, fontWeight: "bold" },
   logout: { color: "#5B4BDB", fontWeight: "600" },
+  notificationsLink: { color: "#5B4BDB", fontWeight: "600" },
   tabs: {
     flexDirection: "row",
     backgroundColor: "#F2F2F7",
