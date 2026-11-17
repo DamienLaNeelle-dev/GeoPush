@@ -1,10 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
-import * as Notifications from "expo-notifications";
 import * as TaskManager from "expo-task-manager";
+
+import { scheduleGeofenceNotification } from "@/notifications";
 
 export const GEOFENCING_TASK_NAME = "geopush-geofencing";
 export const GEOFENCE_TARGETS_KEY = "@geopush/geofence-targets";
+export const GEOFENCE_LAST_NOTIFIED_KEY = "@geopush/geofence-last-notified";
 
 type GeofenceTarget = {
   title: string;
@@ -47,13 +49,32 @@ TaskManager.defineTask<GeofencingTaskData>(
       return;
     }
 
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: target.title,
-        body: `Vous êtes près de ${target.placeName}.`,
-        data: { reminderId: regionIdentifier },
-      },
-      trigger: null,
-    });
+    const lastNotifiedJson = await AsyncStorage.getItem(
+      GEOFENCE_LAST_NOTIFIED_KEY,
+    );
+    const lastNotified = lastNotifiedJson
+      ? (JSON.parse(lastNotifiedJson) as Record<string, number>)
+      : {};
+    const now = Date.now();
+    const cooldown = 15 * 60 * 1000;
+
+    if (now - (lastNotified[regionIdentifier] ?? 0) < cooldown) {
+      console.log(
+        `Notification ignorée pour ${regionIdentifier}: délai anti-doublon actif.`,
+      );
+      return;
+    }
+
+    lastNotified[regionIdentifier] = now;
+    await AsyncStorage.setItem(
+      GEOFENCE_LAST_NOTIFIED_KEY,
+      JSON.stringify(lastNotified),
+    );
+
+    await scheduleGeofenceNotification(
+      target.title,
+      target.placeName,
+      regionIdentifier,
+    );
   },
 );

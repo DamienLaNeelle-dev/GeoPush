@@ -1,17 +1,24 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
-import * as Notifications from "expo-notifications";
 
 import {
+  GEOFENCE_LAST_NOTIFIED_KEY,
   GEOFENCE_TARGETS_KEY,
   GEOFENCING_TASK_NAME,
 } from "@/tasks/geofencingTask";
+import { requestNotificationPermission } from "@/notifications";
 import { Reminder } from "@/types/reminder";
 
 type GeofenceTarget = {
   title: string;
   placeName: string;
 };
+
+type IdentifiedRegion = Location.LocationRegion & {
+  identifier: string;
+};
+
+let synchronization: Promise<void> | null = null;
 
 const requestBackgroundPermissions = async (): Promise<void> => {
   const foreground = await Location.getForegroundPermissionsAsync();
@@ -37,28 +44,20 @@ const requestBackgroundPermissions = async (): Promise<void> => {
   }
 };
 
-const requestNotificationPermissions = async (): Promise<void> => {
-  const current = await Notifications.getPermissionsAsync();
-  const permissions =
-    current.status === "granted"
-      ? current
-      : await Notifications.requestPermissionsAsync();
+export const syncGeofences = async (reminders: Reminder[]): Promise<void> => {
+  if (synchronization) return synchronization;
 
-  if (permissions.status !== "granted") {
-    throw new Error("La permission d'envoyer des notifications est requise.");
-  }
-
-  await Notifications.setNotificationChannelAsync("geopush-reminders", {
-    name: "Rappels GeoPush",
-    importance: Notifications.AndroidImportance.DEFAULT,
+  synchronization = synchronizeGeofences(reminders).finally(() => {
+    synchronization = null;
   });
+  return synchronization;
 };
 
-export const syncGeofences = async (reminders: Reminder[]): Promise<void> => {
+const synchronizeGeofences = async (reminders: Reminder[]): Promise<void> => {
   const activeReminders = reminders.filter(
     (reminder) => reminder.status === "active" && reminder.places.length > 0,
   );
-  const regions: Location.LocationRegion[] = [];
+  const regions: IdentifiedRegion[] = [];
   const targets: Record<string, GeofenceTarget> = {};
 
   for (const reminder of activeReminders) {
@@ -84,11 +83,40 @@ export const syncGeofences = async (reminders: Reminder[]): Promise<void> => {
       await Location.stopGeofencingAsync(GEOFENCING_TASK_NAME);
     }
     await AsyncStorage.removeItem(GEOFENCE_TARGETS_KEY);
+    await AsyncStorage.removeItem(GEOFENCE_REGIONS_KEY);
+    await AsyncStorage.removeItem(GEOFENCE_LAST_NOTIFIED_KEY);
     return;
   }
 
   await requestBackgroundPermissions();
-  await requestNotificationPermissions();
+  await requestNotificationPermission();
   await AsyncStorage.setItem(GEOFENCE_TARGETS_KEY, JSON.stringify(targets));
+
+  const regionSignature = JSON.stringify(
+    regions
+      .map(({ identifier, latitude, longitude, radius }) => ({
+        identifier,
+        latitude,
+        longitude,
+        radius,
+      }))
+      .sort((a, b) => a.identifier.localeCompare(b.identifier)),
+  );
+  const currentSignature = await AsyncStorage.getItem(GEOFENCE_REGIONS_KEY);
+  const isStarted = await Location.hasStartedGeofencingAsync(
+    GEOFENCING_TASK_NAME,
+  );
+
+  if (isStarted && currentSignature === regionSignature) {
+    return;
+  }
+
+  if (isStarted) {
+    await Location.stopGeofencingAsync(GEOFENCING_TASK_NAME);
+  }
+
   await Location.startGeofencingAsync(GEOFENCING_TASK_NAME, regions);
+  await AsyncStorage.setItem(GEOFENCE_REGIONS_KEY, regionSignature);
 };
+
+const GEOFENCE_REGIONS_KEY = "@geopush/geofence-regions";
