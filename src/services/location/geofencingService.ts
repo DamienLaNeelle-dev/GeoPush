@@ -3,7 +3,6 @@ import * as Location from "expo-location";
 
 import { requestNotificationPermission } from "@/notifications";
 import {
-  GEOFENCE_LAST_NOTIFIED_KEY,
   GEOFENCE_TARGETS_KEY,
   GEOFENCING_TASK_NAME,
 } from "@/tasks/geofencingTask";
@@ -84,7 +83,6 @@ const synchronizeGeofences = async (reminders: Reminder[]): Promise<void> => {
     }
     await AsyncStorage.removeItem(GEOFENCE_TARGETS_KEY);
     await AsyncStorage.removeItem(GEOFENCE_REGIONS_KEY);
-    await AsyncStorage.removeItem(GEOFENCE_LAST_NOTIFIED_KEY);
     return;
   }
 

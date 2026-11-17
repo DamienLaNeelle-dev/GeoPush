@@ -14,7 +14,10 @@ import { ReminderItem } from "@/components/reminder-item";
 import { useAuth } from "@/context/AuthContext";
 import { useReminders } from "@/hooks/use-reminders";
 import { logout } from "@/services/auth/authService";
-import { deleteReminder, setReminderDone } from "@/services/reminders/reminderService";
+import {
+  deleteReminder,
+  setReminderDone,
+} from "@/services/reminders/reminderService";
 import { Reminder } from "@/types/reminder";
 
 type Tab = "active" | "done";
@@ -42,7 +45,7 @@ export default function HomeScreen() {
 
   const handleToggle = (r: Reminder) => {
     setReminderDone(uid, r.id, r.status === "active").catch((e) =>
-      Alert.alert("Erreur", e.message)
+      Alert.alert("Erreur", e.message),
     );
   };
 
@@ -53,7 +56,9 @@ export default function HomeScreen() {
         text: "Supprimer",
         style: "destructive",
         onPress: () =>
-          deleteReminder(uid, r.id).catch((e) => Alert.alert("Erreur", e.message)),
+          deleteReminder(uid, r.id).catch((e) =>
+            Alert.alert("Erreur", e.message),
+          ),
       },
     ]);
   };
@@ -62,7 +67,6 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Mes rappels</Text>
-<<<<<<< HEAD
         <View style={styles.headerActions}>
           <TouchableOpacity onPress={() => router.push("/notifications")}>
             <Text style={styles.notificationsLink}>Notifications</Text>
@@ -71,11 +75,6 @@ export default function HomeScreen() {
             <Text style={styles.logout}>Se déconnecter</Text>
           </TouchableOpacity>
         </View>
-=======
-        <TouchableOpacity onPress={() => router.push("/notifications")}>
-          <Text style={styles.notificationsLink}>Notifications</Text>
-        </TouchableOpacity>
->>>>>>> 60548e2c497ed238aa888565e17144047fd71de6
       </View>
 
       <View style={styles.tabs}>
@@ -83,7 +82,9 @@ export default function HomeScreen() {
           style={[styles.tab, tab === "active" && styles.tabSelected]}
           onPress={() => setTab("active")}
         >
-          <Text style={[styles.tabText, tab === "active" && styles.tabTextSelected]}>
+          <Text
+            style={[styles.tabText, tab === "active" && styles.tabTextSelected]}
+          >
             En cours ({active.length})
           </Text>
         </TouchableOpacity>
@@ -92,7 +93,9 @@ export default function HomeScreen() {
           style={[styles.tab, tab === "done" && styles.tabSelected]}
           onPress={() => setTab("done")}
         >
-          <Text style={[styles.tabText, tab === "done" && styles.tabTextSelected]}>
+          <Text
+            style={[styles.tabText, tab === "done" && styles.tabTextSelected]}
+          >
             Terminés ({done.length})
           </Text>
         </TouchableOpacity>
@@ -109,7 +112,9 @@ export default function HomeScreen() {
           contentContainerStyle={{ paddingBottom: 100 }}
           ListEmptyComponent={
             <Text style={styles.empty}>
-              {tab === "active" ? "Aucun rappel en cours." : "Aucun rappel terminé."}
+              {tab === "active"
+                ? "Aucun rappel en cours."
+                : "Aucun rappel terminé."}
             </Text>
           }
           renderItem={({ item }) => (
@@ -117,7 +122,10 @@ export default function HomeScreen() {
               reminder={item}
               onToggleDone={() => handleToggle(item)}
               onPress={() =>
-                router.push({ pathname: "/reminder-form", params: { id: item.id } })
+                router.push({
+                  pathname: "/reminder-form",
+                  params: { id: item.id },
+                })
               }
               onDelete={() => handleDelete(item)}
             />
@@ -125,7 +133,10 @@ export default function HomeScreen() {
         />
       )}
 
-      <TouchableOpacity style={styles.fab} onPress={() => router.push("/reminder-form")}>
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => router.push("/reminder-form")}
+      >
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
     </View>
@@ -133,7 +144,12 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FFFFFF", paddingTop: 70, paddingHorizontal: 20 },
+  container: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    paddingTop: 70,
+    paddingHorizontal: 20,
+  },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",

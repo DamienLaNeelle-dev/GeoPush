@@ -11,10 +11,11 @@ import { syncGeofences } from "@/services/location/geofencingService";
 import "@/tasks/geofencingTask";
 
 function GeofencingSync() {
+  const { user, loading: authLoading } = useAuth();
   const { reminders, loading, error } = useReminders();
 
   useEffect(() => {
-    if (loading || error) return;
+    if (authLoading || !user || loading || error) return;
 
     const synchronize = () => {
       syncGeofences(reminders).catch((syncError) => {
@@ -31,7 +32,7 @@ function GeofencingSync() {
     });
 
     return () => subscription.remove();
-  }, [error, loading, reminders]);
+  }, [authLoading, error, loading, reminders, user]);
 
   return null;
 }
