@@ -1,11 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 
+import { requestNotificationPermission } from "@/notifications";
 import {
+  GEOFENCE_LAST_NOTIFIED_KEY,
   GEOFENCE_TARGETS_KEY,
   GEOFENCING_TASK_NAME,
 } from "@/tasks/geofencingTask";
-import { requestNotificationPermission } from "@/notifications";
 import { Reminder } from "@/types/reminder";
 
 type GeofenceTarget = {
@@ -62,14 +63,6 @@ const synchronizeGeofences = async (reminders: Reminder[]): Promise<void> => {
   for (const reminder of activeReminders) {
     for (const place of reminder.places) {
       const identifier = `${reminder.id}:${place.id}`;
-      const placeName = place.name?.trim();
-      if (!placeName) {
-        console.error(
-          `Le commerce ${place.id} du rappel ${reminder.id} n'a pas de nom.`,
-        );
-        continue;
-      }
-
       regions.push({
         identifier,
         latitude: place.latitude,
@@ -80,7 +73,7 @@ const synchronizeGeofences = async (reminders: Reminder[]): Promise<void> => {
       });
       targets[identifier] = {
         title: reminder.title,
-        placeName,
+        placeName: place.name,
       };
     }
   }
@@ -91,6 +84,7 @@ const synchronizeGeofences = async (reminders: Reminder[]): Promise<void> => {
     }
     await AsyncStorage.removeItem(GEOFENCE_TARGETS_KEY);
     await AsyncStorage.removeItem(GEOFENCE_REGIONS_KEY);
+    await AsyncStorage.removeItem(GEOFENCE_LAST_NOTIFIED_KEY);
     return;
   }
 
@@ -109,9 +103,8 @@ const synchronizeGeofences = async (reminders: Reminder[]): Promise<void> => {
       .sort((a, b) => a.identifier.localeCompare(b.identifier)),
   );
   const currentSignature = await AsyncStorage.getItem(GEOFENCE_REGIONS_KEY);
-  const isStarted = await Location.hasStartedGeofencingAsync(
-    GEOFENCING_TASK_NAME,
-  );
+  const isStarted =
+    await Location.hasStartedGeofencingAsync(GEOFENCING_TASK_NAME);
 
   if (isStarted && currentSignature === regionSignature) {
     return;

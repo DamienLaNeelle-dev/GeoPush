@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -9,17 +9,35 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import MapView, { Marker, Region } from "react-native-maps";
 
 import { Chip } from "@/components/chip";
 import { PlaceList } from "@/components/place-list";
-import { CATEGORIES, CategoryKey, MAX_PLACES, getCategoryLabel } from "@/constants/categories";
+import {
+  CATEGORIES,
+  CategoryKey,
+  MAX_PLACES,
+  SEARCH_RADIUS,
+  getCategoryLabel,
+} from "@/constants/categories";
 import { useReminderDraft } from "@/context/ReminderDraftContext";
 import { usePlaceSearch } from "@/hooks/use-place-search";
 import { useReminders } from "@/hooks/use-reminders";
 import { Coords, getCurrentCoords } from "@/services/location/locationService";
 import { Place, SavedPlace } from "@/types/place";
 import { distanceInMeters, formatDistance } from "@/utils/geo";
+
+const METERS_PER_DEGREE = 111320;
+const SEARCH_DEBOUNCE = 600; // ms d'attente après la fin du déplacement de la carte
+const MIN_RADIUS = 500;
+const MAX_RADIUS = 5000;
+
+// Rayon de recherche déduit du zoom : la moitié de la zone visible, arrondi à 250 m.
+const radiusFromRegion = (r: Region): number => {
+  const half = (r.latitudeDelta * METERS_PER_DEGREE) / 2;
+  const rounded = Math.round(half / 250) * 250;
+  return Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, rounded));
+};
 
 // Carte interactive.
 //  - mode "pick" (depuis le formulaire) : on choisit les commerces d'un rappel.
@@ -43,6 +61,22 @@ export default function PlaceMapScreen() {
 
   const mapRef = useRef<MapView>(null);
   const centerRef = useRef<Coords | null>(null); // centre actuel de la carte
+  const radiusRef = useRef<number>(SEARCH_RADIUS); // rayon déduit du zoom actuel
+  const lastSearchRef = useRef<{ center: Coords; radius: number } | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const categoriesRef = useRef<CategoryKey[]>(categories); // valeur à jour dans les callbacks
+  categoriesRef.current = categories;
+
+  // Lance une recherche autour du centre de la carte et mémorise où on a cherché.
+  const runSearch = useCallback(
+    (center?: Coords, radius?: number) => {
+      const c = center ?? centerRef.current ?? undefined;
+      const r = radius ?? radiusRef.current;
+      if (c) lastSearchRef.current = { center: c, radius: r };
+      search(categoriesRef.current, c, r);
+    },
+    [search]
+  );
 
   // 1. Position de l'utilisateur au démarrage.
   useEffect(() => {
@@ -61,12 +95,48 @@ export default function PlaceMapScreen() {
   useEffect(() => {
     if (!ready) return;
     if (categories.length === 0) {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      lastSearchRef.current = null;
       reset();
       return;
     }
-    search(categories, centerRef.current ?? undefined);
+    runSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categories, ready]);
+
+  // Nettoyage du timer en quittant l'écran.
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  // 3. La carte a fini de bouger : on recalcule les commerces si on s'est assez déplacé.
+  const handleRegionChangeComplete = (r: Region) => {
+    const center = { latitude: r.latitude, longitude: r.longitude };
+    const radius = radiusFromRegion(r);
+    centerRef.current = center;
+    radiusRef.current = radius;
+
+    if (categoriesRef.current.length === 0) return;
+
+    const last = lastSearchRef.current;
+    if (last) {
+      const visibleMeters = r.latitudeDelta * METERS_PER_DEGREE;
+      const moved = distanceInMeters(
+        last.center.latitude,
+        last.center.longitude,
+        center.latitude,
+        center.longitude
+      );
+      const movedEnough = moved > Math.max(200, visibleMeters * 0.25);
+      const zoomChanged = radius / last.radius >= 1.5 || last.radius / radius >= 1.5;
+      if (!movedEnough && !zoomChanged) return; // quasi pas bougé : on garde les résultats
+    }
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => runSearch(center, radius), SEARCH_DEBOUNCE);
+  };
 
   // Distances calculées depuis l'utilisateur (et non depuis le centre de la recherche).
   const results: Place[] = useMemo(() => {
@@ -137,12 +207,14 @@ export default function PlaceMapScreen() {
     draft.setChosenPlaces([...chosen, saved]);
   };
 
+  // Bouton manuel (secours) : relance tout de suite, sans attendre le debounce.
   const searchHere = () => {
     if (categories.length === 0) {
       Alert.alert("Catégorie", "Choisissez d'abord une catégorie de commerce.");
       return;
     }
-    search(categories, centerRef.current ?? undefined);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    runSearch();
   };
 
   const initialRegion = user
@@ -165,9 +237,7 @@ export default function PlaceMapScreen() {
         style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
         showsUserLocation
-        onRegionChangeComplete={(r) => {
-          centerRef.current = { latitude: r.latitude, longitude: r.longitude };
-        }}
+        onRegionChangeComplete={handleRegionChangeComplete}
       >
         {/* Résultats de la recherche (rouge) */}
         {unchosenResults.map((p) => (
@@ -250,7 +320,7 @@ export default function PlaceMapScreen() {
         {locationError && <Text style={styles.error}>{locationError}</Text>}
         {error && <Text style={styles.error}>{error}</Text>}
         {searched && !loading && results.length === 0 && (
-          <Text style={styles.hint}>Aucun commerce trouvé ici : déplacez la carte et relancez.</Text>
+          <Text style={styles.hint}>Aucun commerce trouvé ici : déplacez la carte pour explorer d'autres zones.</Text>
         )}
 
         {results.length > 0 && (

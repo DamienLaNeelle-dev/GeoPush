@@ -260,9 +260,10 @@ const runProviders = (allProviders: Provider[]): Promise<PlaceWithoutDistance[]>
 
 // --- Cache local (pour ne pas solliciter les serveurs à chaque recherche) ----
 
-// Clé arrondie à ~1 km : plusieurs recherches dans le même quartier partagent le cache.
+// Clé arrondie à ~100 m : assez fin pour que chaque déplacement de carte
+// donne des résultats frais, assez large pour éviter de rappeler les serveurs pour rien.
 const cacheKey = (lat: number, lon: number, categories: CategoryKey[], radius: number) =>
-  `places:v2:${lat.toFixed(2)}:${lon.toFixed(2)}:${[...categories].sort().join(",")}:${radius}`;
+  `places:v3:${lat.toFixed(3)}:${lon.toFixed(3)}:${[...categories].sort().join(",")}:${radius}`;
 
 const readCache = async (key: string): Promise<PlaceWithoutDistance[] | null> => {
   try {

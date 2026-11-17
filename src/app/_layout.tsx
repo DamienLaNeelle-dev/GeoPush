@@ -1,25 +1,27 @@
 import { Stack } from "expo-router";
-import { AppState, ActivityIndicator, View } from "react-native";
 import { useEffect } from "react";
+import { ActivityIndicator, AppState, View } from "react-native";
 
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ReminderDraftProvider } from "@/context/ReminderDraftContext";
 import { useNotificationRedirect } from "@/hooks/use-notification-redirect";
 import { useReminders } from "@/hooks/use-reminders";
-import { syncGeofences } from "@/services/location/geofencingService";
 import "@/notifications";
+import { syncGeofences } from "@/services/location/geofencingService";
 import "@/tasks/geofencingTask";
 
 function GeofencingSync() {
-  const { user, loading: authLoading } = useAuth();
   const { reminders, loading, error } = useReminders();
 
   useEffect(() => {
-    if (authLoading || !user || loading || error) return;
+    if (loading || error) return;
 
     const synchronize = () => {
       syncGeofences(reminders).catch((syncError) => {
-        console.error("Impossible de synchroniser les zones GeoPush.", syncError);
+        console.error(
+          "Impossible de synchroniser les zones GeoPush.",
+          syncError,
+        );
       });
     };
 
@@ -29,7 +31,7 @@ function GeofencingSync() {
     });
 
     return () => subscription.remove();
-  }, [authLoading, error, loading, reminders, user]);
+  }, [error, loading, reminders]);
 
   return null;
 }
