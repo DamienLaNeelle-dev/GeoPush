@@ -66,7 +66,12 @@ export async function scheduleGeofenceNotification(
   });
 }
 
-export async function scheduleTestNotification(seconds: number): Promise<void> {
+export async function scheduleTestNotification(
+  seconds: number,
+  reminderTitle: string,
+  placeName: string,
+  regionIdentifier: string,
+): Promise<void> {
   if (!Number.isFinite(seconds) || seconds <= 0) {
     throw new Error("Le délai de notification doit être supérieur à zéro.");
   }
@@ -74,9 +79,9 @@ export async function scheduleTestNotification(seconds: number): Promise<void> {
   await requestNotificationPermission();
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: "Un lieu vous attend",
-      body: "Touchez pour ouvrir la carte des lieux",
-      data: { url: "/place-map" },
+      title: reminderTitle,
+      body: `Vous êtes près de ${placeName}.`,
+      data: { url: "/place-map", reminderId: regionIdentifier },
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
