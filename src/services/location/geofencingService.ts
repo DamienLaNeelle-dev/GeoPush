@@ -2,7 +2,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 
 import {
-  GEOFENCE_LAST_NOTIFIED_KEY,
   GEOFENCE_TARGETS_KEY,
   GEOFENCING_TASK_NAME,
 } from "@/tasks/geofencingTask";
@@ -63,6 +62,14 @@ const synchronizeGeofences = async (reminders: Reminder[]): Promise<void> => {
   for (const reminder of activeReminders) {
     for (const place of reminder.places) {
       const identifier = `${reminder.id}:${place.id}`;
+      const placeName = place.name?.trim();
+      if (!placeName) {
+        console.error(
+          `Le commerce ${place.id} du rappel ${reminder.id} n'a pas de nom.`,
+        );
+        continue;
+      }
+
       regions.push({
         identifier,
         latitude: place.latitude,
@@ -73,7 +80,7 @@ const synchronizeGeofences = async (reminders: Reminder[]): Promise<void> => {
       });
       targets[identifier] = {
         title: reminder.title,
-        placeName: place.name,
+        placeName,
       };
     }
   }
@@ -84,7 +91,6 @@ const synchronizeGeofences = async (reminders: Reminder[]): Promise<void> => {
     }
     await AsyncStorage.removeItem(GEOFENCE_TARGETS_KEY);
     await AsyncStorage.removeItem(GEOFENCE_REGIONS_KEY);
-    await AsyncStorage.removeItem(GEOFENCE_LAST_NOTIFIED_KEY);
     return;
   }
 

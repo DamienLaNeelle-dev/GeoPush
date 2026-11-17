@@ -66,7 +66,9 @@ export async function scheduleGeofenceNotification(
   });
 }
 
-export async function scheduleTestNotification(seconds: number): Promise<void> {
+export async function scheduleTestNotification(
+  seconds: number,
+): Promise<void> {
   if (!Number.isFinite(seconds) || seconds <= 0) {
     throw new Error("Le délai de notification doit être supérieur à zéro.");
   }
