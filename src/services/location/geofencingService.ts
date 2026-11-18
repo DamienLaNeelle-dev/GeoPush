@@ -3,6 +3,7 @@ import * as Location from "expo-location";
 
 import { requestNotificationPermission } from "@/notifications";
 import {
+  GEOFENCE_INSIDE_KEY,
   GEOFENCE_TARGETS_KEY,
   GEOFENCING_TASK_NAME,
 } from "@/tasks/geofencingTask";
@@ -64,7 +65,8 @@ const synchronizeGeofences = async (reminders: Reminder[]): Promise<void> => {
         longitude: place.longitude,
         radius: reminder.radius,
         notifyOnEnter: true,
-        notifyOnExit: false,
+        // Nécessaire pour savoir quand l'utilisateur quitte la zone
+        notifyOnExit: true,
       });
       targets[identifier] = {
         title: reminder.title,
@@ -81,12 +83,14 @@ const synchronizeGeofences = async (reminders: Reminder[]): Promise<void> => {
     }
     await AsyncStorage.removeItem(GEOFENCE_TARGETS_KEY);
     await AsyncStorage.removeItem(GEOFENCE_REGIONS_KEY);
+    await AsyncStorage.removeItem(GEOFENCE_INSIDE_KEY);
     return;
   }
 
   await requestBackgroundPermissions();
   await requestNotificationPermission();
   await AsyncStorage.setItem(GEOFENCE_TARGETS_KEY, JSON.stringify(targets));
+  await pruneInsideRegions(targets);
 
   const regionSignature = JSON.stringify(
     regions
@@ -115,3 +119,16 @@ const synchronizeGeofences = async (reminders: Reminder[]): Promise<void> => {
 };
 
 const GEOFENCE_REGIONS_KEY = "@geopush/geofence-regions";
+
+// Oublie l'état « dans la zone » des rappels supprimés ou désactivés
+const pruneInsideRegions = async (
+  targets: Record<string, GeofenceTarget>,
+): Promise<void> => {
+  const json = await AsyncStorage.getItem(GEOFENCE_INSIDE_KEY);
+  if (!json) return;
+  const inside = JSON.parse(json) as Record<string, true>;
+  const kept = Object.fromEntries(
+    Object.entries(inside).filter(([identifier]) => identifier in targets),
+  );
+  await AsyncStorage.setItem(GEOFENCE_INSIDE_KEY, JSON.stringify(kept));
+};
