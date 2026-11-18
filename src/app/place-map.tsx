@@ -24,6 +24,7 @@ import { useReminderDraft } from "@/context/ReminderDraftContext";
 import { usePlaceSearch } from "@/hooks/use-place-search";
 import { useReminders } from "@/hooks/use-reminders";
 import { Coords, getCurrentCoords } from "@/services/location/locationService";
+import { openDirections } from "@/services/navigation/navigationService";
 import { Place, SavedPlace } from "@/types/place";
 import { distanceInMeters, formatDistance } from "@/utils/geo";
 
@@ -58,6 +59,8 @@ export default function PlaceMapScreen() {
   const [user, setUser] = useState<Coords | null>(null);
   const [ready, setReady] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  // Commerce actuellement sélectionné (affiche le bouton « Y aller »)
+  const [selected, setSelected] = useState<SavedPlace | null>(null);
 
   const mapRef = useRef<MapView>(null);
   const centerRef = useRef<Coords | null>(null); // centre actuel de la carte
@@ -190,7 +193,15 @@ export default function PlaceMapScreen() {
     }
   };
 
+  const goTo = (place: SavedPlace) => {
+    openDirections(place.latitude, place.longitude, place.name).catch(() =>
+      Alert.alert("Itinéraire", "Impossible d'ouvrir l'application de cartes.")
+    );
+  };
+
   const togglePlace = (place: Place) => {
+    const { distance, ...saved } = place;
+    setSelected(saved);
     if (!picking) return;
 
     if (chosenIds.includes(place.id)) {
@@ -203,7 +214,6 @@ export default function PlaceMapScreen() {
       return;
     }
 
-    const { distance, ...saved } = place;
     draft.setChosenPlaces([...chosen, saved]);
   };
 
@@ -271,6 +281,7 @@ export default function PlaceMapScreen() {
             title={place.name}
             description={`Rappel : ${reminderTitle} · ${distanceTo(place) ?? ""}`}
             pinColor="purple"
+            onPress={() => setSelected(place)}
           />
         ))}
       </MapView>
@@ -302,6 +313,27 @@ export default function PlaceMapScreen() {
 
       {/* Panneau du bas : résultats */}
       <View style={styles.panel}>
+        {/* Commerce sélectionné : guidage GPS */}
+        {selected && (
+          <View style={styles.selectedCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.selectedName} numberOfLines={1}>
+                {selected.name}
+              </Text>
+              <Text style={styles.hintInline}>
+                {getCategoryLabel(selected.category)}
+                {distanceTo(selected) ? ` · ${distanceTo(selected)}` : ""}
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.goButton} onPress={() => goTo(selected)}>
+              <Text style={styles.goText}>Y aller</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setSelected(null)} hitSlop={10}>
+              <Text style={styles.dismiss}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.panelHeader}>
           <Text style={styles.panelTitle}>
             {categories.length === 0
@@ -417,4 +449,23 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   validateText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
+  selectedCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    marginBottom: 12,
+    borderRadius: 12,
+    backgroundColor: "#F2F0FF",
+  },
+  selectedName: { fontSize: 15, fontWeight: "700" },
+  hintInline: { fontSize: 13, color: "#777777", marginTop: 2 },
+  goButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#5B4BDB",
+  },
+  goText: { color: "#FFFFFF", fontWeight: "bold" },
+  dismiss: { fontSize: 16, color: "#777777" },
 });

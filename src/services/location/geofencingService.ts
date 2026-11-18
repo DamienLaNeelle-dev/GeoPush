@@ -6,12 +6,8 @@ import {
   GEOFENCE_TARGETS_KEY,
   GEOFENCING_TASK_NAME,
 } from "@/tasks/geofencingTask";
+import { GeofenceTarget } from "@/types/geofence";
 import { Reminder } from "@/types/reminder";
-
-type GeofenceTarget = {
-  title: string;
-  placeName: string;
-};
 
 type IdentifiedRegion = Location.LocationRegion & {
   identifier: string;
@@ -73,6 +69,8 @@ const synchronizeGeofences = async (reminders: Reminder[]): Promise<void> => {
       targets[identifier] = {
         title: reminder.title,
         placeName: place.name,
+        latitude: place.latitude,
+        longitude: place.longitude,
       };
     }
   }

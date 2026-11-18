@@ -3,15 +3,11 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 
 import { scheduleGeofenceNotification } from "@/notifications";
+import { GeofenceTarget } from "@/types/geofence";
 
 export const GEOFENCING_TASK_NAME = "geopush-geofencing";
 export const GEOFENCE_TARGETS_KEY = "@geopush/geofence-targets";
 export const GEOFENCE_LAST_NOTIFIED_KEY = "@geopush/geofence-last-notified";
-
-type GeofenceTarget = {
-  title: string;
-  placeName: string;
-};
 
 type GeofencingTaskData = {
   eventType: Location.GeofencingEventType;
@@ -43,9 +39,7 @@ TaskManager.defineTask<GeofencingTaskData>(
     const target = targets[regionIdentifier];
 
     if (!target) {
-      console.error(
-        `Aucun rappel trouvé pour la région ${regionIdentifier}`,
-      );
+      console.error(`Aucun rappel trouvé pour la région ${regionIdentifier}`);
       return;
     }
 
@@ -75,6 +69,8 @@ TaskManager.defineTask<GeofencingTaskData>(
       target.title,
       target.placeName,
       regionIdentifier,
+      target.latitude,
+      target.longitude,
     );
   },
 );
