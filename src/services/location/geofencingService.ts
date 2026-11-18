@@ -3,44 +3,54 @@ import * as Location from "expo-location";
 
 import { requestNotificationPermission } from "@/notifications";
 import {
-  GEOFENCE_INSIDE_KEY,
   GEOFENCE_TARGETS_KEY,
   GEOFENCING_TASK_NAME,
 } from "@/tasks/geofencingTask";
 import { GeofenceTarget } from "@/types/geofence";
 import { Reminder } from "@/types/reminder";
 
-type IdentifiedRegion = Location.LocationRegion & {
-  identifier: string;
+const GEOFENCE_REGIONS_KEY = "@geopush/geofence-regions";
+
+export type GeofenceStatus =
+  | "active"
+  | "no-reminders"
+  | "background-denied"
+  | "denied"
+  | "notifications-denied";
+
+type IdentifiedRegion = Location.LocationRegion & { identifier: string };
+
+let synchronization: Promise<GeofenceStatus> | null = null;
+
+const stopGeofencesIfStarted = async (): Promise<void> => {
+  if (await Location.hasStartedGeofencingAsync(GEOFENCING_TASK_NAME)) {
+    await Location.stopGeofencingAsync(GEOFENCING_TASK_NAME);
+  }
+  await AsyncStorage.removeItem(GEOFENCE_REGIONS_KEY);
 };
 
-let synchronization: Promise<void> | null = null;
-
-const requestBackgroundPermissions = async (): Promise<void> => {
+// Renvoie null si tout est accordé, sinon le statut à afficher
+const checkLocationPermissions = async (): Promise<GeofenceStatus | null> => {
   const foreground = await Location.getForegroundPermissionsAsync();
   const foregroundPermission =
     foreground.status === "granted"
       ? foreground
       : await Location.requestForegroundPermissionsAsync();
-  if (foregroundPermission.status !== "granted") {
-    throw new Error(
-      "La permission de localisation au premier plan est requise.",
-    );
-  }
+  if (foregroundPermission.status !== "granted") return "denied";
 
   const background = await Location.getBackgroundPermissionsAsync();
   const backgroundPermission =
     background.status === "granted"
       ? background
       : await Location.requestBackgroundPermissionsAsync();
-  if (backgroundPermission.status !== "granted") {
-    throw new Error(
-      "Autorisez la localisation « Toujours » pour GeoPush dans Réglages > Confidentialité et sécurité > Service de localisation > GeoPush.",
-    );
-  }
+  if (backgroundPermission.status !== "granted") return "background-denied";
+
+  return null;
 };
 
-export const syncGeofences = async (reminders: Reminder[]): Promise<void> => {
+export const syncGeofences = (
+  reminders: Reminder[],
+): Promise<GeofenceStatus> => {
   if (synchronization) return synchronization;
 
   synchronization = synchronizeGeofences(reminders).finally(() => {
@@ -49,7 +59,9 @@ export const syncGeofences = async (reminders: Reminder[]): Promise<void> => {
   return synchronization;
 };
 
-const synchronizeGeofences = async (reminders: Reminder[]): Promise<void> => {
+const synchronizeGeofences = async (
+  reminders: Reminder[],
+): Promise<GeofenceStatus> => {
   const activeReminders = reminders.filter(
     (reminder) => reminder.status === "active" && reminder.places.length > 0,
   );
@@ -65,8 +77,7 @@ const synchronizeGeofences = async (reminders: Reminder[]): Promise<void> => {
         longitude: place.longitude,
         radius: reminder.radius,
         notifyOnEnter: true,
-        // Nécessaire pour savoir quand l'utilisateur quitte la zone
-        notifyOnExit: true,
+        notifyOnExit: false,
       });
       targets[identifier] = {
         title: reminder.title,
@@ -78,19 +89,26 @@ const synchronizeGeofences = async (reminders: Reminder[]): Promise<void> => {
   }
 
   if (regions.length === 0) {
-    if (await Location.hasStartedGeofencingAsync(GEOFENCING_TASK_NAME)) {
-      await Location.stopGeofencingAsync(GEOFENCING_TASK_NAME);
-    }
+    await stopGeofencesIfStarted();
     await AsyncStorage.removeItem(GEOFENCE_TARGETS_KEY);
-    await AsyncStorage.removeItem(GEOFENCE_REGIONS_KEY);
-    await AsyncStorage.removeItem(GEOFENCE_INSIDE_KEY);
-    return;
+    return "no-reminders";
   }
 
-  await requestBackgroundPermissions();
-  await requestNotificationPermission();
+  // Mode dégradé : on arrête les zones au lieu de lancer une erreur
+  const permissionProblem = await checkLocationPermissions();
+  if (permissionProblem) {
+    await stopGeofencesIfStarted();
+    return permissionProblem;
+  }
+
+  try {
+    await requestNotificationPermission();
+  } catch {
+    await stopGeofencesIfStarted();
+    return "notifications-denied";
+  }
+
   await AsyncStorage.setItem(GEOFENCE_TARGETS_KEY, JSON.stringify(targets));
-  await pruneInsideRegions(targets);
 
   const regionSignature = JSON.stringify(
     regions
@@ -106,29 +124,11 @@ const synchronizeGeofences = async (reminders: Reminder[]): Promise<void> => {
   const isStarted =
     await Location.hasStartedGeofencingAsync(GEOFENCING_TASK_NAME);
 
-  if (isStarted && currentSignature === regionSignature) {
-    return;
-  }
+  if (isStarted && currentSignature === regionSignature) return "active";
 
-  if (isStarted) {
-    await Location.stopGeofencingAsync(GEOFENCING_TASK_NAME);
-  }
+  if (isStarted) await Location.stopGeofencingAsync(GEOFENCING_TASK_NAME);
 
   await Location.startGeofencingAsync(GEOFENCING_TASK_NAME, regions);
   await AsyncStorage.setItem(GEOFENCE_REGIONS_KEY, regionSignature);
-};
-
-const GEOFENCE_REGIONS_KEY = "@geopush/geofence-regions";
-
-// Oublie l'état « dans la zone » des rappels supprimés ou désactivés
-const pruneInsideRegions = async (
-  targets: Record<string, GeofenceTarget>,
-): Promise<void> => {
-  const json = await AsyncStorage.getItem(GEOFENCE_INSIDE_KEY);
-  if (!json) return;
-  const inside = JSON.parse(json) as Record<string, true>;
-  const kept = Object.fromEntries(
-    Object.entries(inside).filter(([identifier]) => identifier in targets),
-  );
-  await AsyncStorage.setItem(GEOFENCE_INSIDE_KEY, JSON.stringify(kept));
+  return "active";
 };
