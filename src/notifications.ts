@@ -16,6 +16,16 @@ Notifications.setNotificationHandler({
 });
 
 export async function ensureNotificationChannels(): Promise<void> {
+  // Catégorie avec le bouton « Y aller » : nécessaire sur iOS ET Android
+  await Notifications.setNotificationCategoryAsync("reminder", [
+    {
+      identifier: "go",
+      buttonTitle: "Y aller",
+      options: { opensAppToForeground: true },
+    },
+  ]);
+
+  // Les canaux n'existent que sur Android
   if (Platform.OS !== "android") return;
 
   await Notifications.setNotificationChannelAsync(
@@ -54,13 +64,24 @@ export async function scheduleGeofenceNotification(
   reminderTitle: string,
   placeName: string,
   regionIdentifier: string,
+  latitude: number,
+  longitude: number,
 ): Promise<void> {
   await requestNotificationPermission();
   await Notifications.scheduleNotificationAsync({
     content: {
       title: reminderTitle,
       body: `Vous êtes près de ${placeName}.`,
-      data: { url: "/place-map", reminderId: regionIdentifier },
+      // Affiche le bouton « Y aller » déclaré dans ensureNotificationChannels
+      categoryIdentifier: "reminder",
+      data: {
+        url: "/place-map",
+        // Même clé que l'anti-doublon du geofencing
+        reminderId: regionIdentifier,
+        placeName,
+        lat: latitude,
+        lon: longitude,
+      },
     },
     trigger: null,
   });
