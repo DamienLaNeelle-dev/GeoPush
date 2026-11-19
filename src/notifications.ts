@@ -63,7 +63,8 @@ export async function requestNotificationPermission(): Promise<void> {
 export async function scheduleGeofenceNotification(
   reminderTitle: string,
   placeName: string,
-  regionIdentifier: string,
+  reminderId: string,
+  placeId: string,
   latitude: number,
   longitude: number,
 ): Promise<void> {
@@ -76,8 +77,9 @@ export async function scheduleGeofenceNotification(
       categoryIdentifier: "reminder",
       data: {
         url: "/place-map",
-        // Même clé que l'anti-doublon du geofencing
-        reminderId: regionIdentifier,
+        // Id du rappel : même clé que l'anti-doublon du geofencing
+        reminderId,
+        placeId,
         placeName,
         lat: latitude,
         lon: longitude,
@@ -91,7 +93,8 @@ export async function scheduleTestNotification(
   seconds: number,
   reminderTitle: string,
   placeName: string,
-  regionIdentifier: string,
+  reminderId: string,
+  placeId: string,
 ): Promise<void> {
   if (!Number.isFinite(seconds) || seconds <= 0) {
     throw new Error("Le délai de notification doit être supérieur à zéro.");
@@ -102,7 +105,7 @@ export async function scheduleTestNotification(
     content: {
       title: reminderTitle,
       body: `Vous êtes près de ${placeName}.`,
-      data: { url: "/place-map", reminderId: regionIdentifier },
+      data: { url: "/place-map", reminderId, placeId },
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,

@@ -97,6 +97,8 @@ const synchronizeGeofences = async (
         notifyOnExit: true,
       });
       targets[identifier] = {
+        reminderId: reminder.id,
+        placeId: place.id,
         title: reminder.title,
         placeName: place.name,
         latitude: place.latitude,
