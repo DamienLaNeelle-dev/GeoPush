@@ -1,6 +1,6 @@
 import React, { createContext, ReactNode, useCallback, useContext, useState } from "react";
 
-import { CategoryKey } from "@/constants/categories";
+import { CategoryKey, DEFAULT_RADIUS } from "@/constants/categories";
 import { SavedPlace } from "@/types/place";
 
 // Brouillon du rappel en cours de création / modification.
@@ -9,8 +9,10 @@ import { SavedPlace } from "@/types/place";
 interface DraftContextType {
   categories: CategoryKey[];
   chosenPlaces: SavedPlace[];
+  radius: number; // rayon de déclenchement, en mètres
   setCategories: (categories: CategoryKey[]) => void;
   setChosenPlaces: (places: SavedPlace[]) => void;
+  setRadius: (radius: number) => void;
   reset: () => void;
 }
 
@@ -19,15 +21,24 @@ const ReminderDraftContext = createContext<DraftContextType | null>(null);
 export const ReminderDraftProvider = ({ children }: { children: ReactNode }) => {
   const [categories, setCategories] = useState<CategoryKey[]>([]);
   const [chosenPlaces, setChosenPlaces] = useState<SavedPlace[]>([]);
+  const [radius, setRadius] = useState<number>(DEFAULT_RADIUS);
 
   const reset = useCallback(() => {
     setCategories([]);
     setChosenPlaces([]);
+    setRadius(DEFAULT_RADIUS);
   }, []);
 
   return (
     <ReminderDraftContext.Provider
-      value={{ categories, chosenPlaces, setCategories, setChosenPlaces, reset }}
+      value={{ categories,
+        chosenPlaces,
+        radius,
+        setCategories,
+        setChosenPlaces,
+        setRadius,
+        reset,
+      }}
     >
       {children}
     </ReminderDraftContext.Provider>
