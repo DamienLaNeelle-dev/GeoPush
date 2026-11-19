@@ -40,12 +40,14 @@ async function redirect(
   ) {
     // Tap sur la notification elle-même
     if (data.url === "/place-map") {
-      // reminderId vaut « <id du rappel>:<id du lieu> » (identifiant de la zone)
-      const [reminderId, ...rest] =
-        typeof data.reminderId === "string" ? data.reminderId.split(":") : [];
       router.push({
         pathname: "/place-map",
-        params: { mode: "view", reminderId, placeId: rest.join(":") },
+        params: {
+          mode: "view",
+          reminderId:
+            typeof data.reminderId === "string" ? data.reminderId : undefined,
+          placeId: typeof data.placeId === "string" ? data.placeId : undefined,
+        },
       });
     }
   }

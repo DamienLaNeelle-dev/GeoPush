@@ -22,8 +22,8 @@ async function notifyIn(seconds: number, reminder: Reminder | undefined) {
       seconds,
       reminder.title,
       place.name,
-      // Même format d'identifiant que les zones de geofencing
-      `${reminder.id}:${place.id}`,
+      reminder.id,
+      place.id,
     );
   } catch (error) {
     console.error("Impossible de programmer la notification de test.", error);

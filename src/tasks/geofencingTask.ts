@@ -70,6 +70,11 @@ TaskManager.defineTask<GeofencingTaskData>(
       return;
     }
 
+    // L'anti-doublon est compté par rappel (et non par lieu) : un rappel avec
+    // plusieurs commerces ne notifie qu'une fois toutes les 15 minutes.
+    // Les rappels validés ne sont plus surveillés (cf. syncGeofences).
+    const reminderId = target.reminderId ?? regionIdentifier.split(":")[0];
+
     const lastNotifiedJson = await AsyncStorage.getItem(
       GEOFENCE_LAST_NOTIFIED_KEY,
     );
@@ -79,14 +84,14 @@ TaskManager.defineTask<GeofencingTaskData>(
     const now = Date.now();
     const cooldown = 15 * 60 * 1000;
 
-    if (now - (lastNotified[regionIdentifier] ?? 0) < cooldown) {
+    if (now - (lastNotified[reminderId] ?? 0) < cooldown) {
       console.log(
-        `Notification ignorée pour ${regionIdentifier}: délai anti-doublon actif.`,
+        `Notification ignorée pour le rappel ${reminderId}: délai anti-doublon actif.`,
       );
       return;
     }
 
-    lastNotified[regionIdentifier] = now;
+    lastNotified[reminderId] = now;
     await AsyncStorage.setItem(
       GEOFENCE_LAST_NOTIFIED_KEY,
       JSON.stringify(lastNotified),
@@ -95,7 +100,8 @@ TaskManager.defineTask<GeofencingTaskData>(
     await scheduleGeofenceNotification(
       target.title,
       target.placeName,
-      regionIdentifier,
+      reminderId,
+      target.placeId ?? regionIdentifier.slice(reminderId.length + 1),
       target.latitude,
       target.longitude,
     );
