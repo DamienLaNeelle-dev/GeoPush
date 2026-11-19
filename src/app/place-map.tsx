@@ -42,27 +42,52 @@ const radiusFromRegion = (r: Region): number => {
 
 // Carte interactive.
 //  - mode "pick" (depuis le formulaire) : on choisit les commerces d'un rappel.
-//  - mode "view" (depuis l'accueil)     : on explore la carte, sans rien modifier.
+//  - mode "view" (depuis une notification) : on affiche les lieux d'un rappel, sans rien modifier.
+// Dans les deux cas, seuls les lieux du rappel concerné sont affichés.
 export default function PlaceMapScreen() {
   const router = useRouter();
-  const { mode, editId } = useLocalSearchParams<{ mode?: string; editId?: string }>();
+  const { mode, reminderId, placeId } = useLocalSearchParams<{
+    mode?: string;
+    reminderId?: string;
+    placeId?: string;
+  }>();
   const picking = mode !== "view";
 
   const draft = useReminderDraft();
-  const { active } = useReminders();
+  const { reminders } = useReminders();
   const { places, loading, error, searched, search, reset } = usePlaceSearch();
 
-  const [localCategories, setLocalCategories] = useState<CategoryKey[]>([]);
-  const categories = picking ? draft.categories : localCategories;
-  const chosen: SavedPlace[] = picking ? draft.chosenPlaces : [];
+  // Rappel affiché en mode "view"
+  const viewedReminder = useMemo(
+    () => (picking ? undefined : reminders.find((r) => r.id === reminderId)),
+    [picking, reminders, reminderId]
+  );
+
+  // null = pas encore modifiées : on part des catégories du rappel affiché
+  const [localCategories, setLocalCategories] = useState<CategoryKey[] | null>(null);
+  const categories = useMemo(
+    () => (picking ? draft.categories : localCategories ?? viewedReminder?.categories ?? []),
+    [picking, draft.categories, localCategories, viewedReminder]
+  );
+  const chosen: SavedPlace[] = useMemo(
+    () => (picking ? draft.chosenPlaces : viewedReminder?.places ?? []),
+    [picking, draft.chosenPlaces, viewedReminder]
+  );
 
   const [user, setUser] = useState<Coords | null>(null);
   const [ready, setReady] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   // Commerce actuellement sélectionné (affiche le bouton « Y aller »)
-  const [selected, setSelected] = useState<SavedPlace | null>(null);
+  // undefined = rien touché : on sélectionne le lieu de la notification
+  const [selectedState, setSelected] = useState<SavedPlace | null | undefined>(undefined);
+  const selected =
+    selectedState !== undefined
+      ? selectedState
+      : viewedReminder?.places.find((p) => p.id === placeId) ?? null;
 
   const mapRef = useRef<MapView>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const fittedRef = useRef(false); // la carte a déjà été cadrée sur les lieux du rappel
   const centerRef = useRef<Coords | null>(null); // centre actuel de la carte
   const radiusRef = useRef<number>(SEARCH_RADIUS); // rayon déduit du zoom actuel
   const lastSearchRef = useRef<{ center: Coords; radius: number } | null>(null);
@@ -93,6 +118,24 @@ export default function PlaceMapScreen() {
       )
       .finally(() => setReady(true));
   }, []);
+
+  // 1 ter. Cadre la carte sur les lieux du rappel (une seule fois).
+  useEffect(() => {
+    if (!mapReady || fittedRef.current || chosen.length === 0) return;
+    fittedRef.current = true;
+    const coords = chosen.map((p) => ({ latitude: p.latitude, longitude: p.longitude }));
+    if (coords.length === 1) {
+      mapRef.current?.animateToRegion(
+        { ...coords[0], latitudeDelta: 0.01, longitudeDelta: 0.01 },
+        400
+      );
+      return;
+    }
+    mapRef.current?.fitToCoordinates(coords, {
+      edgePadding: { top: 140, right: 60, bottom: 360, left: 60 },
+      animated: true,
+    });
+  }, [mapReady, chosen]);
 
   // 2. À chaque changement de catégories, on relance la recherche autour du centre de la carte.
   useEffect(() => {
@@ -155,21 +198,6 @@ export default function PlaceMapScreen() {
     user
       ? formatDistance(distanceInMeters(user.latitude, user.longitude, p.latitude, p.longitude))
       : null;
-
-  // Lieux déjà associés à d'autres rappels actifs.
-  const otherSaved = useMemo(() => {
-    const seen = new Set<string>([...results.map((p) => p.id), ...chosen.map((p) => p.id)]);
-    const out: { reminderTitle: string; place: SavedPlace }[] = [];
-    for (const reminder of active) {
-      if (reminder.id === editId) continue;
-      for (const place of reminder.places) {
-        if (seen.has(place.id)) continue;
-        seen.add(place.id);
-        out.push({ reminderTitle: reminder.title, place });
-      }
-    }
-    return out;
-  }, [active, results, chosen, editId]);
 
   const chosenIds = chosen.map((p) => p.id);
   const unchosenResults = results.filter((p) => !chosenIds.includes(p.id));
@@ -247,6 +275,7 @@ export default function PlaceMapScreen() {
         style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
         showsUserLocation
+        onMapReady={() => setMapReady(true)}
         onRegionChangeComplete={handleRegionChangeComplete}
       >
         {/* Résultats de la recherche (rouge) */}
@@ -261,7 +290,7 @@ export default function PlaceMapScreen() {
           />
         ))}
 
-        {/* Commerces choisis pour ce rappel (vert) */}
+        {/* Commerces de ce rappel (vert) */}
         {chosen.map((p) => (
           <Marker
             key={`c-${p.id}`}
@@ -273,17 +302,6 @@ export default function PlaceMapScreen() {
           />
         ))}
 
-        {/* Lieux associés à d'autres rappels (violet) */}
-        {otherSaved.map(({ reminderTitle, place }) => (
-          <Marker
-            key={`o-${place.id}`}
-            coordinate={{ latitude: place.latitude, longitude: place.longitude }}
-            title={place.name}
-            description={`Rappel : ${reminderTitle} · ${distanceTo(place) ?? ""}`}
-            pinColor="purple"
-            onPress={() => setSelected(place)}
-          />
-        ))}
       </MapView>
 
       {/* Barre du haut : fermer + catégories */}
@@ -332,6 +350,12 @@ export default function PlaceMapScreen() {
               <Text style={styles.dismiss}>✕</Text>
             </TouchableOpacity>
           </View>
+        )}
+
+        {viewedReminder && (
+          <Text style={styles.reminderTitle} numberOfLines={1}>
+            {viewedReminder.title}
+          </Text>
         )}
 
         <View style={styles.panelHeader}>
@@ -436,6 +460,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 10,
   },
+  reminderTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 8 },
   panelTitle: { fontSize: 15, fontWeight: "700", flex: 1 },
   link: { color: "#5B4BDB", fontWeight: "600" },
   hint: { fontSize: 13, color: "#777777", marginTop: 8 },

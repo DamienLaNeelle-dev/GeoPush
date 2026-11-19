@@ -59,7 +59,7 @@ export default function ReminderFormScreen() {
   }
 
   const openMap = () =>
-    router.push({ pathname: "/place-map", params: { mode: "pick", editId: id ?? "" } });
+    router.push({ pathname: "/place-map", params: { mode: "pick" } });
 
   const handleSave = () => {
     if (!title.trim()) {
