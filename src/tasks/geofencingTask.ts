@@ -4,16 +4,30 @@ import * as TaskManager from "expo-task-manager";
 
 import { scheduleGeofenceNotification } from "@/notifications";
 import { GeofenceTarget } from "@/types/geofence";
+import {
+  evaluateGeofenceEvent,
+  GEOFENCE_INSIDE_KEY,
+  GEOFENCE_LAST_NOTIFIED_KEY,
+  GeofenceEvent,
+  InsideRegions,
+  LastNotifiedRegions,
+} from "@/utils/geofence-entry";
 
 export const GEOFENCING_TASK_NAME = "geopush-geofencing";
 export const GEOFENCE_TARGETS_KEY = "@geopush/geofence-targets";
-export const GEOFENCE_LAST_NOTIFIED_KEY = "@geopush/geofence-last-notified";
-// Zones dans lesquelles l'utilisateur se trouve déjà (déjà notifié)
-export const GEOFENCE_INSIDE_KEY = "@geopush/geofence-inside";
 
-const readInsideRegions = async (): Promise<Record<string, true>> => {
-  const json = await AsyncStorage.getItem(GEOFENCE_INSIDE_KEY);
-  return json ? (JSON.parse(json) as Record<string, true>) : {};
+const readJson = async <T>(key: string): Promise<T> => {
+  const json = await AsyncStorage.getItem(key);
+  return json ? (JSON.parse(json) as T) : ({} as T);
+};
+
+// Traduit l'événement expo en événement de la logique pure (null = ignoré)
+const toGeofenceEvent = (
+  eventType: Location.GeofencingEventType,
+): GeofenceEvent | null => {
+  if (eventType === Location.GeofencingEventType.Enter) return "enter";
+  if (eventType === Location.GeofencingEventType.Exit) return "exit";
+  return null;
 };
 
 type GeofencingTaskData = {
@@ -37,32 +51,45 @@ TaskManager.defineTask<GeofencingTaskData>(
       return;
     }
 
-    const inside = await readInsideRegions();
+    const event = toGeofenceEvent(data.eventType);
+    if (!event) return;
 
-    if (data.eventType === Location.GeofencingEventType.Exit) {
-      // Sortie de zone : la prochaine entrée pourra de nouveau notifier
-      delete inside[regionIdentifier];
-      await AsyncStorage.setItem(GEOFENCE_INSIDE_KEY, JSON.stringify(inside));
-      return;
-    }
+    // Toute la décision (déjà dans la zone ? délai de 15 min ?) est dans
+    // utils/geofence-entry.ts ; ici on ne fait que lire/écrire l'état.
+    const decision = evaluateGeofenceEvent({
+      event,
+      regionId: regionIdentifier,
+      inside: await readJson<InsideRegions>(GEOFENCE_INSIDE_KEY),
+      lastNotified: await readJson<LastNotifiedRegions>(
+        GEOFENCE_LAST_NOTIFIED_KEY,
+      ),
+      now: Date.now(),
+    });
 
-    if (data.eventType !== Location.GeofencingEventType.Enter) return;
-
-    // L'OS renvoie un « Enter » à chaque (ré)enregistrement des zones, donc
-    // à chaque ouverture de l'appli si on est déjà dedans : on l'ignore.
-    if (inside[regionIdentifier]) {
+    if (decision.action === "ignored-already-inside") {
       console.log(
         `Notification ignorée pour ${regionIdentifier}: déjà dans la zone.`,
       );
       return;
     }
-    inside[regionIdentifier] = true;
-    await AsyncStorage.setItem(GEOFENCE_INSIDE_KEY, JSON.stringify(inside));
 
-    const targetsJson = await AsyncStorage.getItem(GEOFENCE_TARGETS_KEY);
-    const targets = targetsJson
-      ? (JSON.parse(targetsJson) as Record<string, GeofenceTarget>)
-      : {};
+    await AsyncStorage.setItem(
+      GEOFENCE_INSIDE_KEY,
+      JSON.stringify(decision.inside),
+    );
+
+    if (decision.action === "exited") return;
+
+    if (decision.action === "ignored-cooldown") {
+      console.log(
+        `Notification ignorée pour ${regionIdentifier}: délai anti-doublon actif.`,
+      );
+      return;
+    }
+
+    const targets = await readJson<Record<string, GeofenceTarget>>(
+      GEOFENCE_TARGETS_KEY,
+    );
     const target = targets[regionIdentifier];
 
     if (!target) {
@@ -70,26 +97,9 @@ TaskManager.defineTask<GeofencingTaskData>(
       return;
     }
 
-    const lastNotifiedJson = await AsyncStorage.getItem(
-      GEOFENCE_LAST_NOTIFIED_KEY,
-    );
-    const lastNotified = lastNotifiedJson
-      ? (JSON.parse(lastNotifiedJson) as Record<string, number>)
-      : {};
-    const now = Date.now();
-    const cooldown = 15 * 60 * 1000;
-
-    if (now - (lastNotified[regionIdentifier] ?? 0) < cooldown) {
-      console.log(
-        `Notification ignorée pour ${regionIdentifier}: délai anti-doublon actif.`,
-      );
-      return;
-    }
-
-    lastNotified[regionIdentifier] = now;
     await AsyncStorage.setItem(
       GEOFENCE_LAST_NOTIFIED_KEY,
-      JSON.stringify(lastNotified),
+      JSON.stringify(decision.lastNotified),
     );
 
     await scheduleGeofenceNotification(
