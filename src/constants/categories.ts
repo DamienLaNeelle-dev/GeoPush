@@ -24,6 +24,7 @@ export const MAX_PLACES = 20;
 
 // Rayons de déclenchement proposés (en mètres).
 export const RADIUS_OPTIONS = [100, 250, 500, 1000, 2000] as const;
+export const DEFAULT_RADIUS = 500;
 
 export const formatRadius = (meters: number): string =>
   meters >= 1000 ? `${meters / 1000} km` : `${meters} m`;

@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import MapView, { Marker, Region } from "react-native-maps";
+import MapView, { Circle, Marker, Region } from "react-native-maps";
 
 import { Chip } from "@/components/chip";
 import { PlaceList } from "@/components/place-list";
@@ -17,7 +17,9 @@ import {
   CATEGORIES,
   CategoryKey,
   MAX_PLACES,
+  RADIUS_OPTIONS,
   SEARCH_RADIUS,
+  formatRadius,
   getCategoryLabel,
 } from "@/constants/categories";
 import { useReminderDraft } from "@/context/ReminderDraftContext";
@@ -215,6 +217,21 @@ export default function PlaceMapScreen() {
       400,
     );
 
+  // Zoome pour que tout le cercle du rayon soit visible
+  // (le panneau du bas cache environ la moitié inférieure de la carte).
+  const showRadius = (center: Coords, radius: number) => {
+    const delta = ((radius * 2) / METERS_PER_DEGREE) * 2.2;
+    mapRef.current?.animateToRegion(
+      {
+        latitude: center.latitude - delta * 0.25,
+        longitude: center.longitude,
+        latitudeDelta: delta,
+        longitudeDelta: delta,
+      },
+      400,
+    );
+  };
+
   const toggleCategory = (key: CategoryKey) => {
     const removing = categories.includes(key);
     const next = removing
@@ -295,6 +312,17 @@ export default function PlaceMapScreen() {
         showsUserLocation
         onRegionChangeComplete={handleRegionChangeComplete}
       >
+        {/* Rayon de déclenchement autour de ma position */}
+        {picking && user && (
+          <Circle
+            center={user}
+            radius={draft.radius}
+            strokeWidth={2}
+            strokeColor="rgba(91, 75, 219, 0.9)"
+            fillColor="rgba(91, 75, 219, 0.15)"
+          />
+        )}
+
         {/* Résultats de la recherche (rouge) */}
         {unchosenResults.map((p) => (
           <Marker
@@ -393,6 +421,30 @@ export default function PlaceMapScreen() {
             <TouchableOpacity onPress={() => setSelected(null)} hitSlop={10}>
               <Text style={styles.dismiss}>✕</Text>
             </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Rayon de déclenchement (le cercle sur la carte) */}
+        {picking && (
+          <View style={styles.radiusRow}>
+            <Text style={styles.radiusLabel}>Rayon</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chips}
+            >
+              {RADIUS_OPTIONS.map((r) => (
+                <Chip
+                  key={r}
+                  label={formatRadius(r)}
+                  selected={draft.radius === r}
+                  onPress={() => {
+                    draft.setRadius(r);
+                    if (user) showRadius(user, r);
+                  }}
+                />
+              ))}
+            </ScrollView>
           </View>
         )}
 
@@ -509,6 +561,13 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
   },
+  radiusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 12,
+  },
+  radiusLabel: { fontSize: 14, fontWeight: "600" },
   panelHeader: {
     flexDirection: "row",
     justifyContent: "space-between",

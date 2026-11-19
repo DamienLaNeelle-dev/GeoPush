@@ -34,14 +34,20 @@ export default function ReminderFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { reminders } = useReminders();
 
-  // Catégories et commerces choisis : stockés dans le brouillon, car c'est la carte qui les modifie.
-  const { categories, chosenPlaces, setCategories, setChosenPlaces, reset } =
-    useReminderDraft();
+  // Catégories, commerces et rayon : stockés dans le brouillon, car la carte les modifie aussi.
+  const {
+    categories,
+    chosenPlaces,
+    radius,
+    setCategories,
+    setChosenPlaces,
+    setRadius,
+    reset,
+  } = useReminderDraft();
 
   const isEdit = !!id;
 
   const [title, setTitle] = useState("");
-  const [radius, setRadius] = useState<number>(500);
 
   // Nouveau rappel : on repart d'un brouillon vide.
   useEffect(() => {
@@ -61,7 +67,7 @@ export default function ReminderFormScreen() {
     setCategories(existing.categories);
     setChosenPlaces(existing.places);
     prefilled.current = true;
-  }, [isEdit, id, reminders, setCategories, setChosenPlaces]);
+  }, [isEdit, id, reminders, setCategories, setChosenPlaces, setRadius]);
 
   if (!user) {
     return <Redirect href="/login" />;
