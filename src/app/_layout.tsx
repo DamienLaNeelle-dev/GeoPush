@@ -4,6 +4,7 @@ import { ActivityIndicator, AppState, View } from "react-native";
 
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ReminderDraftProvider } from "@/context/ReminderDraftContext";
+import { PermissionsGate } from "@/components/permissions-gate";
 import { useNotificationRedirect } from "@/hooks/use-notification-redirect";
 import { useReminders } from "@/hooks/use-reminders";
 import "@/notifications";
@@ -65,8 +66,11 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <ReminderDraftProvider>
-        <GeofencingSync />
-        <RootNavigator />
+        {/* Rien ne démarre tant que les permissions ne sont pas accordées */}
+        <PermissionsGate>
+          <GeofencingSync />
+          <RootNavigator />
+        </PermissionsGate>
       </ReminderDraftProvider>
     </AuthProvider>
   );
