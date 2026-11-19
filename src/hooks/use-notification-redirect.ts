@@ -4,56 +4,33 @@ import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
 import { useEffect } from "react";
 
-import { openDirections } from "@/services/navigation/navigationService";
-
-const LAST_NOTIFIED_KEY = "@geopush/geofence-last-notified";
-export const GO_ACTION_ID = "go";
-
-async function markAsNotified(reminderId: unknown): Promise<void> {
-  if (typeof reminderId !== "string") return;
-  const stored = await AsyncStorage.getItem(LAST_NOTIFIED_KEY);
-  const lastNotified = stored
-    ? (JSON.parse(stored) as Record<string, number>)
-    : {};
-  lastNotified[reminderId] = Date.now();
-  await AsyncStorage.setItem(LAST_NOTIFIED_KEY, JSON.stringify(lastNotified));
-}
+import { GEOFENCE_LAST_NOTIFIED_KEY as LAST_NOTIFIED_KEY } from "@/utils/geofence-entry";
 
 async function redirect(
   response: Notifications.NotificationResponse | null,
 ): Promise<void> {
-  if (!response) return;
+  // Un tap sur la notification elle-même, pas sur un bouton d'action
+  if (response?.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER)
+    return;
 
-  // Le contenu vient de l'extérieur : on vérifie chaque champ.
-  const data = response.notification.request.content.data ?? {};
-  await markAsNotified(data.reminderId);
+  // Le contenu vient de l'extérieur : on n'accepte que les routes existantes.
+  const url = response.notification.request.content.data?.url;
+  const reminderId = response.notification.request.content.data?.reminderId;
+  if (typeof reminderId === "string") {
+    const stored = await AsyncStorage.getItem(LAST_NOTIFIED_KEY);
+    const lastNotified = stored
+      ? (JSON.parse(stored) as Record<string, number>)
+      : {};
+    lastNotified[reminderId] = Date.now();
+    await AsyncStorage.setItem(LAST_NOTIFIED_KEY, JSON.stringify(lastNotified));
+  }
 
-  if (response.actionIdentifier === GO_ACTION_ID) {
-    // Bouton « Y aller » : ouvre Plans avec l'itinéraire
-    if (typeof data.lat === "number" && typeof data.lon === "number") {
-      const label =
-        typeof data.placeName === "string" ? data.placeName : undefined;
-      await openDirections(data.lat, data.lon, label);
-    }
-  } else if (
-    response.actionIdentifier === Notifications.DEFAULT_ACTION_IDENTIFIER
-  ) {
-    // Tap sur la notification elle-même
-    if (data.url === "/place-map") {
-      router.push({
-        pathname: "/place-map",
-        params: {
-          mode: "view",
-          reminderId:
-            typeof data.reminderId === "string" ? data.reminderId : undefined,
-          placeId: typeof data.placeId === "string" ? data.placeId : undefined,
-        },
-      });
-    }
+  if (url === "/place-map") {
+    router.push({ pathname: "/place-map", params: { mode: "view" } });
   }
 
   // Pour ne pas rejouer ce tap au prochain rechargement
-  await Notifications.clearLastNotificationResponseAsync();
+  Notifications.clearLastNotificationResponse();
 }
 
 export function useNotificationRedirect() {

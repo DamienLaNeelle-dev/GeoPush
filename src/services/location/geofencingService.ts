@@ -48,12 +48,26 @@ const checkLocationPermissions = async (): Promise<GeofenceStatus | null> => {
   return null;
 };
 
+type SyncOptions = {
+  // Arrête puis relance les zones même si elles n'ont pas changé : l'OS renvoie
+  // alors un « Enter » pour chaque zone où l'on se trouve déjà (utile à
+  // l'ouverture de l'appli, quand aucune entrée n'a pu être détectée).
+  forceRestart?: boolean;
+};
+
 export const syncGeofences = (
   reminders: Reminder[],
+  options: SyncOptions = {},
 ): Promise<GeofenceStatus> => {
-  if (synchronization) return synchronization;
+  if (synchronization) {
+    // Une synchro est déjà en cours : si un redémarrage est demandé, on le
+    // lance juste après au lieu de le perdre.
+    return options.forceRestart
+      ? synchronization.then(() => syncGeofences(reminders, options))
+      : synchronization;
+  }
 
-  synchronization = synchronizeGeofences(reminders).finally(() => {
+  synchronization = synchronizeGeofences(reminders, options).finally(() => {
     synchronization = null;
   });
   return synchronization;
@@ -61,6 +75,7 @@ export const syncGeofences = (
 
 const synchronizeGeofences = async (
   reminders: Reminder[],
+  { forceRestart = false }: SyncOptions,
 ): Promise<GeofenceStatus> => {
   const activeReminders = reminders.filter(
     (reminder) => reminder.status === "active" && reminder.places.length > 0,
@@ -77,7 +92,9 @@ const synchronizeGeofences = async (
         longitude: place.longitude,
         radius: reminder.radius,
         notifyOnEnter: true,
-        notifyOnExit: false,
+        // Les sorties sont aussi suivies : sans elles l'OS ne sait pas toujours
+        // que l'on est sorti, et ne renvoie pas d'« Enter » au retour.
+        notifyOnExit: true,
       });
       targets[identifier] = {
         reminderId: reminder.id,
@@ -114,11 +131,12 @@ const synchronizeGeofences = async (
 
   const regionSignature = JSON.stringify(
     regions
-      .map(({ identifier, latitude, longitude, radius }) => ({
+      .map(({ identifier, latitude, longitude, radius, notifyOnExit }) => ({
         identifier,
         latitude,
         longitude,
         radius,
+        notifyOnExit,
       }))
       .sort((a, b) => a.identifier.localeCompare(b.identifier)),
   );
@@ -126,7 +144,9 @@ const synchronizeGeofences = async (
   const isStarted =
     await Location.hasStartedGeofencingAsync(GEOFENCING_TASK_NAME);
 
-  if (isStarted && currentSignature === regionSignature) return "active";
+  if (isStarted && !forceRestart && currentSignature === regionSignature) {
+    return "active";
+  }
 
   if (isStarted) await Location.stopGeofencingAsync(GEOFENCING_TASK_NAME);
 
