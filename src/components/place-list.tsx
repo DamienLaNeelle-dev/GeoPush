@@ -1,6 +1,8 @@
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { getCategoryLabel } from "@/constants/categories";
+import { Icon } from "@/components/ui/icon";
+import { getCategoryEmoji, getCategoryLabel } from "@/constants/categories";
+import { colors, radius } from "@/constants/ui";
 import { Place } from "@/types/place";
 import { formatDistance } from "@/utils/geo";
 
@@ -12,23 +14,38 @@ interface Props {
 
 export function PlaceList({ places, onSelect, selectedIds = [] }: Props) {
   return (
-    <View>
+    <View style={styles.list}>
       {places.map((place) => {
         const selected = selectedIds.includes(place.id);
         return (
-        <TouchableOpacity
-          key={place.id}
-          style={[styles.row, selected && styles.rowSelected]}
-          disabled={!onSelect}
-          onPress={() => onSelect?.(place)}
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={styles.name}>{place.name}</Text>
-            <Text style={styles.sub}>{getCategoryLabel(place.category)}</Text>
-          </View>
-          <Text style={styles.distance}>{formatDistance(place.distance)}</Text>
-          {selected && <Text style={styles.check}>✓</Text>}
-        </TouchableOpacity>
+          <Pressable
+            key={place.id}
+            style={({ pressed }) => [
+              styles.row,
+              selected && styles.rowSelected,
+              pressed && styles.rowPressed,
+            ]}
+            disabled={!onSelect}
+            onPress={() => onSelect?.(place)}
+          >
+            <View style={[styles.emoji, selected && styles.emojiSelected]}>
+              <Text style={{ fontSize: 18 }}>
+                {getCategoryEmoji(place.category)}
+              </Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.name} numberOfLines={1}>
+                {place.name}
+              </Text>
+              <Text style={styles.sub}>
+                {getCategoryLabel(place.category)} ·{" "}
+                {formatDistance(place.distance)}
+              </Text>
+            </View>
+            <View style={[styles.check, selected && styles.checkSelected]}>
+              {selected && <Icon name="check" size={14} color={colors.onPrimary} />}
+            </View>
+          </Pressable>
         );
       })}
     </View>
@@ -36,19 +53,39 @@ export function PlaceList({ places, onSelect, selectedIds = [] }: Props) {
 }
 
 const styles = StyleSheet.create({
+  list: { gap: 8 },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: "#EEEEEE",
-    borderRadius: 10,
-    marginBottom: 8,
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
   },
-  rowSelected: { borderColor: "#5B4BDB", backgroundColor: "#F2F0FF" },
-  check: { color: "#5B4BDB", fontWeight: "bold", fontSize: 18, marginLeft: 10 },
-  name: { fontSize: 15, fontWeight: "600" },
-  sub: { fontSize: 13, color: "#777777", marginTop: 2 },
-  distance: { color: "#5B4BDB", fontWeight: "600", marginLeft: 10 },
+  rowSelected: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  rowPressed: { opacity: 0.8 },
+  emoji: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceMuted,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emojiSelected: { backgroundColor: colors.surface },
+  name: { fontSize: 15, fontWeight: "600", color: colors.text },
+  sub: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+  check: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.border,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  checkSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
 });

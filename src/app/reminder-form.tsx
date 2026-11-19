@@ -1,24 +1,29 @@
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Chip } from "@/components/chip";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { TextField } from "@/components/ui/text-field";
 import {
   MAX_PLACES,
   RADIUS_OPTIONS,
   formatRadius,
-  getCategoryLabels,
+  getCategoryEmoji,
+  getCategoryLabel,
 } from "@/constants/categories";
+import { colors, font, radius as radii, shadow, spacing } from "@/constants/ui";
 import { useAuth } from "@/context/AuthContext";
 import { useReminderDraft } from "@/context/ReminderDraftContext";
 import { useReminders } from "@/hooks/use-reminders";
@@ -48,6 +53,7 @@ export default function ReminderFormScreen() {
   const isEdit = !!id;
 
   const [title, setTitle] = useState("");
+  const insets = useSafeAreaInsets();
 
   // Nouveau rappel : on repart d'un brouillon vide.
   useEffect(() => {
@@ -76,7 +82,7 @@ export default function ReminderFormScreen() {
   const openMap = () =>
     router.push({
       pathname: "/place-map",
-      params: { mode: "pick", editId: id ?? "" },
+      params: { mode: "pick" },
     });
 
   const handleSave = () => {
@@ -111,128 +117,271 @@ export default function ReminderFormScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: "#FFFFFF" }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
+    <View style={styles.screen}>
+      {/* En-tête de la modale */}
+      {/* iOS : feuille modale (pas d'encoche) ; Android : plein écran */}
+      <View
+        style={[
+          styles.topBar,
+          { paddingTop: Platform.OS === "ios" ? spacing.lg : insets.top + 8 },
+        ]}
       >
-        <Text style={styles.screenTitle}>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={10}
+          style={styles.iconButton}
+          accessibilityLabel="Fermer"
+        >
+          <Icon name="close" size={16} color={colors.text} />
+        </Pressable>
+        <Text style={styles.topTitle}>
           {isEdit ? "Modifier le rappel" : "Nouveau rappel"}
         </Text>
+        <View style={{ width: 36 }} />
+      </View>
 
-        <Text style={styles.label}>Titre</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Ex : Acheter du pain"
-          value={title}
-          onChangeText={setTitle}
-        />
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* 1. Quoi */}
+          <Section step={1} title="Que faut-il vous rappeler ?">
+            <TextField
+              icon="sparkles"
+              placeholder="Ex : Acheter du pain"
+              value={title}
+              onChangeText={setTitle}
+              returnKeyType="done"
+            />
+          </Section>
 
-        <Text style={styles.label}>Où vous le rappeler ?</Text>
-        <Text style={styles.hint}>
-          Ouvrez la carte, choisissez les types de commerces (boulangerie,
-          boucherie…), puis touchez les commerces à surveiller. Sans commerce
-          précis, tous ceux des catégories choisies autour de vous seront
-          surveillés.
-        </Text>
+          {/* 2. Où */}
+          <Section step={2} title="Où vous le rappeler ?">
+            <Pressable
+              onPress={openMap}
+              style={({ pressed }) => [
+                styles.mapCard,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <View style={styles.mapIcon}>
+                <Icon name="map" size={22} color={colors.onPrimary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.mapTitle}>
+                  {categories.length > 0
+                    ? "Modifier sur la carte"
+                    : "Choisir sur la carte"}
+                </Text>
+                <Text style={styles.mapText}>
+                  {categories.length > 0
+                    ? `${categories.length} catégorie${categories.length > 1 ? "s" : ""} · ${
+                        chosenPlaces.length > 0
+                          ? `${chosenPlaces.length} commerce${chosenPlaces.length > 1 ? "s" : ""}`
+                          : "tous les commerces proches"
+                      }`
+                    : "Types de commerces et lieux précis"}
+                </Text>
+              </View>
+              <Icon name="chevronRight" size={16} color={colors.primary} />
+            </Pressable>
 
-        <TouchableOpacity style={styles.mapButton} onPress={openMap}>
-          <Text style={styles.mapButtonText}>🗺️ Choisir sur la carte</Text>
-        </TouchableOpacity>
+            {categories.length > 0 ? (
+              <View style={styles.row}>
+                {categories.map((key) => (
+                  <View key={key} style={styles.tag}>
+                    <Text style={styles.tagText}>
+                      {getCategoryEmoji(key)} {getCategoryLabel(key)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.hint}>
+                Choisissez les types de commerces (boulangerie, boucherie…),
+                puis sélectionnez les commerces à surveiller.
+              </Text>
+            )}
 
-        {categories.length > 0 ? (
-          <Text style={styles.summary}>
-            Catégories : {getCategoryLabels(categories)}
-          </Text>
-        ) : (
-          <Text style={styles.hint}>
-            Aucune catégorie choisie pour le moment.
-          </Text>
-        )}
+            {chosenPlaces.length > 0 && (
+              <>
+                <Text style={styles.subLabel}>
+                  Commerces choisis · {chosenPlaces.length}/{MAX_PLACES}
+                </Text>
+                <View style={styles.places}>
+                  {chosenPlaces.map((p) => (
+                    <View key={p.id} style={styles.placeRow}>
+                      <Text style={{ fontSize: 16 }}>
+                        {getCategoryEmoji(p.category)}
+                      </Text>
+                      <Text style={styles.placeName} numberOfLines={1}>
+                        {p.name}
+                      </Text>
+                      <Pressable
+                        hitSlop={10}
+                        accessibilityLabel={`Retirer ${p.name}`}
+                        onPress={() =>
+                          setChosenPlaces(
+                            chosenPlaces.filter((x) => x.id !== p.id),
+                          )
+                        }
+                      >
+                        <Icon
+                          name="close"
+                          size={14}
+                          color={colors.textSubtle}
+                        />
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+          </Section>
 
-        {chosenPlaces.length > 0 && (
-          <>
-            <Text style={styles.label}>
-              Commerces choisis ({chosenPlaces.length}/{MAX_PLACES})
-            </Text>
-            <Text style={styles.hint}>
-              Touchez un commerce pour le retirer.
-            </Text>
+          {/* 3. Rayon */}
+          <Section
+            step={3}
+            title="À quelle distance ?"
+            hint="Vous serez prévenu en entrant dans ce rayon autour d'un commerce."
+          >
             <View style={styles.row}>
-              {chosenPlaces.map((p) => (
+              {RADIUS_OPTIONS.map((r) => (
                 <Chip
-                  key={p.id}
-                  label={`${p.name}  ✕`}
-                  selected
-                  onPress={() =>
-                    setChosenPlaces(chosenPlaces.filter((x) => x.id !== p.id))
-                  }
+                  key={r}
+                  label={formatRadius(r)}
+                  selected={radius === r}
+                  onPress={() => setRadius(r)}
                 />
               ))}
             </View>
-          </>
-        )}
+          </Section>
+        </ScrollView>
 
-        <Text style={styles.label}>Rayon de déclenchement</Text>
-        <View style={styles.row}>
-          {RADIUS_OPTIONS.map((r) => (
-            <Chip
-              key={r}
-              label={formatRadius(r)}
-              selected={radius === r}
-              onPress={() => setRadius(r)}
-            />
-          ))}
+        {/* Bouton fixé en bas */}
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
+          <Button
+            title={isEdit ? "Enregistrer les modifications" : "Créer le rappel"}
+            icon="check"
+            onPress={handleSave}
+          />
         </View>
+      </KeyboardAvoidingView>
+    </View>
+  );
+}
 
-        <TouchableOpacity style={styles.button} onPress={handleSave}>
-          <Text style={styles.buttonText}>Enregistrer</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.cancel}>Annuler</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
+function Section({
+  step,
+  title,
+  hint,
+  children,
+}: {
+  step: number;
+  title: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.step}>
+          <Text style={styles.stepText}>{step}</Text>
+        </View>
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+      {hint && <Text style={styles.hint}>{hint}</Text>}
+      {children}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 25, paddingTop: 30, paddingBottom: 60 },
-  screenTitle: { fontSize: 26, fontWeight: "bold", marginBottom: 25 },
-  label: { fontSize: 14, fontWeight: "600", marginBottom: 8, marginTop: 14 },
-  hint: { fontSize: 13, color: "#777777", marginBottom: 10 },
-  summary: { fontSize: 14, color: "#333333", marginBottom: 6 },
-  input: {
-    height: 55,
-    borderWidth: 1,
-    borderColor: "#DDDDDD",
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    marginBottom: 10,
+  screen: { flex: 1, backgroundColor: colors.background },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
   },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 },
-  mapButton: {
-    height: 52,
-    borderWidth: 1,
-    borderColor: "#5B4BDB",
-    borderRadius: 10,
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 12,
+    ...shadow(1),
   },
-  mapButtonText: { color: "#5B4BDB", fontWeight: "700", fontSize: 15 },
-  button: {
-    height: 55,
-    backgroundColor: "#5B4BDB",
-    borderRadius: 10,
+  topTitle: { fontSize: 17, fontWeight: "700", color: colors.text },
+  container: { padding: spacing.lg, paddingBottom: 40, gap: spacing.lg },
+  section: {
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    gap: spacing.md,
+    ...shadow(1),
+  },
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  step: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.primarySoft,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 25,
   },
-  buttonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
-  cancel: { color: "#5B4BDB", textAlign: "center", marginTop: 20 },
+  stepText: { fontSize: 13, fontWeight: "800", color: colors.primary },
+  sectionTitle: { ...font.subheading, color: colors.text, flex: 1 },
+  hint: { fontSize: 13, color: colors.textMuted, lineHeight: 19 },
+  subLabel: { ...font.overline, color: colors.textSubtle, marginTop: 4 },
+  mapCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: radii.md,
+    backgroundColor: colors.primarySoft,
+  },
+  mapIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  mapTitle: { fontSize: 15, fontWeight: "700", color: colors.primary },
+  mapText: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  tag: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceMuted,
+  },
+  tagText: { fontSize: 13, fontWeight: "600", color: colors.text },
+  places: { gap: 6 },
+  placeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surfaceMuted,
+  },
+  placeName: { flex: 1, fontSize: 14, fontWeight: "500", color: colors.text },
+  footer: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    backgroundColor: colors.background,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
 });

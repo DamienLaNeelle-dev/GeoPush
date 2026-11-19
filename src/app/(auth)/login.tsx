@@ -1,19 +1,14 @@
 import { useState } from "react";
 
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Alert, Pressable, StyleSheet, Text } from "react-native";
 
 import { useRouter } from "expo-router";
-import { login } from "../../services/auth/authService";
+
+import { AuthScreen } from "@/components/ui/auth-screen";
+import { Button } from "@/components/ui/button";
+import { TextField } from "@/components/ui/text-field";
+import { colors } from "@/constants/ui";
+import { login } from "@/services/auth/authService";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -54,100 +49,56 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    <AuthScreen
+      title="Bon retour !"
+      subtitle="Connectez-vous pour retrouver vos rappels."
+      footer={
+        <Pressable onPress={() => router.replace("/register")} hitSlop={8}>
+          <Text style={styles.footerText}>
+            Pas encore de compte ?{" "}
+            <Text style={styles.footerLink}>Créer un compte</Text>
+          </Text>
+        </Pressable>
+      }
     >
-      <View style={styles.content}>
-        <Text style={styles.title}>Bienvenue !</Text>
+      <TextField
+        label="Adresse email"
+        icon="mail"
+        placeholder="exemple@email.com"
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="email"
+        textContentType="emailAddress"
+        returnKeyType="next"
+      />
 
-        <Text style={styles.subtitle}>Connectez-vous à votre compte</Text>
+      <TextField
+        label="Mot de passe"
+        icon="lock"
+        placeholder="Votre mot de passe"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        autoComplete="current-password"
+        textContentType="password"
+        returnKeyType="go"
+        onSubmitEditing={handleLogin}
+      />
 
-        <Text style={styles.label}>Adresse email</Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="exemple@email.com"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-
-        <Text style={styles.label}>Mot de passe</Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="Votre mot de passe"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-
-        <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.buttonText}>Se connecter</Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => router.replace("/register")}>
-          <Text style={styles.link}>Pas encore de compte ? Créer un compte</Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+      <Button
+        title="Se connecter"
+        onPress={handleLogin}
+        loading={loading}
+        style={{ marginTop: 8 }}
+      />
+    </AuthScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    backgroundColor: "#FFFFFF",
-  },
-  content: {
-    paddingHorizontal: 25,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: "#777777",
-    marginBottom: 35,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  input: {
-    height: 55,
-    borderWidth: 1,
-    borderColor: "#DDDDDD",
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    marginBottom: 20,
-  },
-  button: {
-    height: 55,
-    backgroundColor: "#5B4BDB",
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  buttonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  link: {
-    color: "#5B4BDB",
-    textAlign: "center",
-    marginTop: 25,
-  },
+  footerText: { fontSize: 15, color: colors.textMuted },
+  footerLink: { color: colors.primary, fontWeight: "700" },
 });

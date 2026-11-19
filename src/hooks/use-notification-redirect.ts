@@ -26,7 +26,16 @@ async function redirect(
   }
 
   if (url === "/place-map") {
-    router.push({ pathname: "/place-map", params: { mode: "view" } });
+    // On transmet le rappel et le lieu : la carte n'affiche que ceux-là
+    const placeId = response.notification.request.content.data?.placeId;
+    router.push({
+      pathname: "/place-map",
+      params: {
+        mode: "view",
+        reminderId: typeof reminderId === "string" ? reminderId : undefined,
+        placeId: typeof placeId === "string" ? placeId : undefined,
+      },
+    });
   }
 
   // Pour ne pas rejouer ce tap au prochain rechargement
