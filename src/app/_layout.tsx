@@ -1,4 +1,5 @@
 import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import { ReactNode, useEffect } from "react";
 import { ActivityIndicator, AppState, View } from "react-native";
 
@@ -8,6 +9,8 @@ import {
   PermissionGate,
   PermissionItem,
 } from "@/components/labo/PermissionGate";
+import { IconName } from "@/components/ui/icon";
+import { colors } from "@/constants/ui";
 import { useAppPermissions } from "@/hooks/use-app-permissions";
 import { useNotificationRedirect } from "@/hooks/use-notification-redirect";
 import { useReminders } from "@/hooks/use-reminders";
@@ -50,18 +53,21 @@ function GeofencingSync() {
 // redemandées tant qu'elles ne sont pas toutes accordées.
 const PERMISSION_LABELS: Record<
   PermissionKey,
-  { label: string; description: string }
+  { label: string; description: string; icon: IconName }
 > = {
   location: {
+    icon: "location",
     label: "Position",
     description: "Pour trouver les commerces autour de vous.",
   },
   background: {
+    icon: "locationBackground",
     label: "Position en arrière-plan (« Toujours »)",
     description:
       "Pour vous rappeler vos tâches près d'un lieu, même appli fermée.",
   },
   notifications: {
+    icon: "bell",
     label: "Notifications",
     description: "Pour vous prévenir quand vous êtes près d'un lieu.",
   },
@@ -94,14 +100,26 @@ function RootNavigator() {
   // Attendre que Firebase vérifie la session
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" />
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          backgroundColor: colors.background,
+        }}
+      >
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: colors.background },
+      }}
+    >
       <Stack.Screen name="reminder-form" options={{ presentation: "modal" }} />
       <Stack.Screen
         name="place-map"
@@ -115,6 +133,8 @@ export default function RootLayout() {
   useNotificationRedirect();
   return (
     <AuthProvider>
+      {/* Fond clair partout : texte de la barre d'état en sombre */}
+      <StatusBar style="dark" />
       <ReminderDraftProvider>
         {/* Rien ne démarre tant que les permissions ne sont pas accordées */}
         <AppPermissionGate>

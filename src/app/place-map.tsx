@@ -3,16 +3,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import MapView, { Circle, Marker, Region } from "react-native-maps";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Chip } from "@/components/chip";
 import { PlaceList } from "@/components/place-list";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import {
   CATEGORIES,
   CategoryKey,
@@ -20,8 +23,10 @@ import {
   RADIUS_OPTIONS,
   SEARCH_RADIUS,
   formatRadius,
+  getCategoryEmoji,
   getCategoryLabel,
 } from "@/constants/categories";
+import { colors, font, radius, shadow, spacing } from "@/constants/ui";
 import { useReminderDraft } from "@/context/ReminderDraftContext";
 import { usePlaceSearch } from "@/hooks/use-place-search";
 import { useReminders } from "@/hooks/use-reminders";
@@ -45,29 +50,59 @@ const radiusFromRegion = (r: Region): number => {
 // Carte interactive.
 //  - mode "pick" (depuis le formulaire) : on choisit les commerces d'un rappel.
 //  - mode "view" (depuis l'accueil)     : on explore la carte, sans rien modifier.
+// Seuls les lieux du rappel ouvert sont affichés, jamais ceux des autres rappels.
 export default function PlaceMapScreen() {
   const router = useRouter();
-  const { mode, editId } = useLocalSearchParams<{
+  const insets = useSafeAreaInsets();
+  const { mode, reminderId, placeId } = useLocalSearchParams<{
     mode?: string;
-    editId?: string;
+    reminderId?: string; // mode "view" : rappel à afficher (depuis une notification)
+    placeId?: string; // mode "view" : lieu de la notification, sélectionné d'office
   }>();
   const picking = mode !== "view";
 
   const draft = useReminderDraft();
-  const { active } = useReminders();
+  const { reminders } = useReminders();
+  // Rappel affiché en mode "view"
+  const viewedReminder = useMemo(
+    () => (picking ? undefined : reminders.find((r) => r.id === reminderId)),
+    [picking, reminders, reminderId],
+  );
   const { places, loading, error, searched, search, reset } = usePlaceSearch();
 
-  const [localCategories, setLocalCategories] = useState<CategoryKey[]>([]);
-  const categories = picking ? draft.categories : localCategories;
-  const chosen: SavedPlace[] = picking ? draft.chosenPlaces : [];
+  // Mode "view" : null = pas encore modifiées, on part des catégories du rappel
+  const [localCategories, setLocalCategories] = useState<CategoryKey[] | null>(
+    null,
+  );
+  const categories = useMemo(
+    () =>
+      picking
+        ? draft.categories
+        : (localCategories ?? viewedReminder?.categories ?? []),
+    [picking, draft.categories, localCategories, viewedReminder],
+  );
+  // Uniquement les lieux du rappel en cours : jamais ceux des autres rappels
+  const chosen: SavedPlace[] = useMemo(
+    () => (picking ? draft.chosenPlaces : (viewedReminder?.places ?? [])),
+    [picking, draft.chosenPlaces, viewedReminder],
+  );
 
   const [user, setUser] = useState<Coords | null>(null);
   const [ready, setReady] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   // Commerce actuellement sélectionné (affiche le bouton « Y aller »)
-  const [selected, setSelected] = useState<SavedPlace | null>(null);
+  // undefined = rien touché : on sélectionne le lieu de la notification
+  const [selectedState, setSelected] = useState<
+    SavedPlace | null | undefined
+  >(undefined);
+  const selected =
+    selectedState !== undefined
+      ? selectedState
+      : (viewedReminder?.places.find((p) => p.id === placeId) ?? null);
 
   const mapRef = useRef<MapView>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const fittedRef = useRef(false); // carte déjà cadrée sur les lieux du rappel
   const centerRef = useRef<Coords | null>(null); // centre actuel de la carte
   const radiusRef = useRef<number>(SEARCH_RADIUS); // rayon déduit du zoom actuel
   const lastSearchRef = useRef<{ center: Coords; radius: number } | null>(null);
@@ -113,6 +148,28 @@ export default function PlaceMapScreen() {
     runSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categories, ready]);
+
+  // À l'ouverture d'un rappel : on cadre la carte sur ses lieux (une seule fois).
+  useEffect(() => {
+    if (!mapReady || fittedRef.current || chosen.length === 0) return;
+    fittedRef.current = true;
+    const coords = chosen.map((p) => ({
+      latitude: p.latitude,
+      longitude: p.longitude,
+    }));
+    if (coords.length === 1) {
+      mapRef.current?.animateToRegion(
+        { ...coords[0], latitudeDelta: 0.01, longitudeDelta: 0.01 },
+        400,
+      );
+      return;
+    }
+    mapRef.current?.fitToCoordinates(coords, {
+      // Marges pour ne pas cacher de lieu sous la barre du haut ou le panneau
+      edgePadding: { top: 160, right: 60, bottom: 420, left: 60 },
+      animated: true,
+    });
+  }, [mapReady, chosen]);
 
   // Nettoyage du timer en quittant l'écran.
   useEffect(() => {
@@ -184,24 +241,6 @@ export default function PlaceMapScreen() {
           ),
         )
       : null;
-
-  // Lieux déjà associés à d'autres rappels actifs.
-  const otherSaved = useMemo(() => {
-    const seen = new Set<string>([
-      ...results.map((p) => p.id),
-      ...chosen.map((p) => p.id),
-    ]);
-    const out: { reminderTitle: string; place: SavedPlace }[] = [];
-    for (const reminder of active) {
-      if (reminder.id === editId) continue;
-      for (const place of reminder.places) {
-        if (seen.has(place.id)) continue;
-        seen.add(place.id);
-        out.push({ reminderTitle: reminder.title, place });
-      }
-    }
-    return out;
-  }, [active, results, chosen, editId]);
 
   const chosenIds = chosen.map((p) => p.id);
   const unchosenResults = results.filter((p) => !chosenIds.includes(p.id));
@@ -297,19 +336,24 @@ export default function PlaceMapScreen() {
   if (!ready) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <View style={styles.loadingIcon}>
+          <Icon name="location" size={28} color={colors.primary} />
+        </View>
+        <ActivityIndicator color={colors.primary} />
         <Text style={styles.hint}>Localisation en cours…</Text>
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
         showsUserLocation
+        showsMyLocationButton={false}
+        onMapReady={() => setMapReady(true)}
         onRegionChangeComplete={handleRegionChangeComplete}
       >
         {/* Rayon de déclenchement autour de ma position */}
@@ -319,58 +363,56 @@ export default function PlaceMapScreen() {
             radius={draft.radius}
             strokeWidth={2}
             strokeColor="rgba(91, 75, 219, 0.9)"
-            fillColor="rgba(91, 75, 219, 0.15)"
+            fillColor="rgba(91, 75, 219, 0.12)"
           />
         )}
 
-        {/* Résultats de la recherche (rouge) */}
+        {/* Résultats de la recherche */}
         {unchosenResults.map((p) => (
           <Marker
             key={`r-${p.id}`}
             coordinate={{ latitude: p.latitude, longitude: p.longitude }}
-            title={p.name}
+            title={`${getCategoryEmoji(p.category)} ${p.name}`}
             description={`${getCategoryLabel(p.category)} · ${distanceTo(p) ?? ""}`}
-            pinColor="red"
+            pinColor={colors.primary}
             onPress={() => togglePlace(p)}
           />
         ))}
 
-        {/* Commerces choisis pour ce rappel (vert) */}
+        {/* Commerces choisis pour ce rappel */}
         {chosen.map((p) => (
           <Marker
             key={`c-${p.id}`}
             coordinate={{ latitude: p.latitude, longitude: p.longitude }}
             title={`✓ ${p.name}`}
             description={`${getCategoryLabel(p.category)} · ${distanceTo(p) ?? ""}`}
-            pinColor="green"
+            pinColor={colors.success}
             onPress={() => togglePlace({ ...p, distance: 0 })}
           />
         ))}
 
-        {/* Lieux associés à d'autres rappels (violet) */}
-        {otherSaved.map(({ reminderTitle, place }) => (
-          <Marker
-            key={`o-${place.id}`}
-            coordinate={{
-              latitude: place.latitude,
-              longitude: place.longitude,
-            }}
-            title={place.name}
-            description={`Rappel : ${reminderTitle} · ${distanceTo(place) ?? ""}`}
-            pinColor="purple"
-            onPress={() => setSelected(place)}
-          />
-        ))}
       </MapView>
 
       {/* Barre du haut : fermer + catégories */}
-      <View style={styles.topBar}>
-        <TouchableOpacity
-          style={styles.closeButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.closeText}>✕</Text>
-        </TouchableOpacity>
+      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+        <View style={styles.topRow}>
+          <Pressable
+            style={styles.roundButton}
+            onPress={() => router.back()}
+            accessibilityLabel="Fermer la carte"
+            hitSlop={6}
+          >
+            <Icon name="close" size={16} color={colors.text} />
+          </Pressable>
+          <View style={styles.titlePill}>
+            <Text style={styles.titleText}>
+              {picking
+                ? "Choisir les commerces"
+                : (viewedReminder?.title ?? "Explorer la carte")}
+            </Text>
+          </View>
+          <View style={{ width: 42 }} />
+        </View>
 
         <ScrollView
           horizontal
@@ -381,6 +423,7 @@ export default function PlaceMapScreen() {
             <Chip
               key={c.key}
               label={c.label}
+              emoji={c.emoji}
               selected={categories.includes(c.key)}
               onPress={() => toggleCategory(c.key)}
             />
@@ -388,119 +431,154 @@ export default function PlaceMapScreen() {
         </ScrollView>
       </View>
 
-      {/* Recentrer sur ma position */}
-      {user && (
-        <TouchableOpacity
-          style={styles.locateButton}
-          onPress={() => focusOn(user)}
-        >
-          <Text style={{ fontSize: 20 }}>📍</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Panneau du bas : résultats */}
-      <View style={styles.panel}>
-        {/* Commerce sélectionné : guidage GPS */}
-        {selected && (
-          <View style={styles.selectedCard}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.selectedName} numberOfLines={1}>
-                {selected.name}
-              </Text>
-              <Text style={styles.hintInline}>
-                {getCategoryLabel(selected.category)}
-                {distanceTo(selected) ? ` · ${distanceTo(selected)}` : ""}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.goButton}
-              onPress={() => goTo(selected)}
-            >
-              <Text style={styles.goText}>Y aller</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setSelected(null)} hitSlop={10}>
-              <Text style={styles.dismiss}>✕</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Rayon de déclenchement (le cercle sur la carte) */}
-        {picking && (
-          <View style={styles.radiusRow}>
-            <Text style={styles.radiusLabel}>Rayon</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chips}
-            >
-              {RADIUS_OPTIONS.map((r) => (
-                <Chip
-                  key={r}
-                  label={formatRadius(r)}
-                  selected={draft.radius === r}
-                  onPress={() => {
-                    draft.setRadius(r);
-                    if (user) showRadius(user, r);
-                  }}
-                />
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        <View style={styles.panelHeader}>
-          <Text style={styles.panelTitle}>
-            {categories.length === 0
-              ? "Choisissez une catégorie"
-              : loading
-                ? "Recherche…"
-                : `${results.length} commerce${results.length > 1 ? "s" : ""}`}
-            {picking && chosen.length > 0
-              ? ` · ${chosen.length} choisi${chosen.length > 1 ? "s" : ""}`
-              : ""}
-          </Text>
-
-          <TouchableOpacity onPress={searchHere} disabled={loading}>
-            {loading ? (
-              <ActivityIndicator />
-            ) : (
-              <Text style={styles.link}>Rechercher dans cette zone</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {locationError && <Text style={styles.error}>{locationError}</Text>}
-        {error && <Text style={styles.error}>{error}</Text>}
-        {searched && !loading && results.length === 0 && (
-          <Text style={styles.hint}>
-            Aucun commerce trouvé ici : déplacez la carte pour explorer d'autres
-            zones.
-          </Text>
-        )}
-
-        {results.length > 0 && (
-          <ScrollView style={{ maxHeight: 200 }}>
-            <PlaceList
-              places={results}
-              selectedIds={chosenIds}
-              onSelect={(p) => {
-                focusOn(p);
-                togglePlace(p);
-              }}
-            />
-          </ScrollView>
-        )}
-
-        {picking && (
-          <TouchableOpacity
-            style={styles.validate}
-            onPress={() => router.back()}
+      {/* Bas de l'écran : bouton de recentrage + panneau */}
+      <View style={styles.bottom} pointerEvents="box-none">
+        {user && (
+          <Pressable
+            style={styles.locateButton}
+            onPress={() => focusOn(user)}
+            accessibilityLabel="Recentrer sur ma position"
           >
-            <Text style={styles.validateText}>
-              {chosen.length > 0 ? `Valider (${chosen.length})` : "Valider"}
-            </Text>
-          </TouchableOpacity>
+            <Icon name="myLocation" size={22} color={colors.primary} />
+          </Pressable>
         )}
+
+        <View style={[styles.panel, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={styles.handle} />
+
+          {/* Commerce sélectionné : guidage GPS */}
+          {selected && (
+            <View style={styles.selectedCard}>
+              <View style={styles.selectedEmoji}>
+                <Text style={{ fontSize: 20 }}>
+                  {getCategoryEmoji(selected.category)}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.selectedName} numberOfLines={1}>
+                  {selected.name}
+                </Text>
+                <Text style={styles.hintInline}>
+                  {getCategoryLabel(selected.category)}
+                  {distanceTo(selected) ? ` · ${distanceTo(selected)}` : ""}
+                </Text>
+              </View>
+              <Pressable
+                style={styles.goButton}
+                onPress={() => goTo(selected)}
+              >
+                <Icon name="directions" size={16} color={colors.onPrimary} />
+                <Text style={styles.goText}>Y aller</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setSelected(null)}
+                hitSlop={10}
+                accessibilityLabel="Fermer"
+              >
+                <Icon name="close" size={14} color={colors.textSubtle} />
+              </Pressable>
+            </View>
+          )}
+
+          {/* Rayon de déclenchement (le cercle sur la carte) */}
+          {picking && (
+            <View style={styles.radiusRow}>
+              <View style={styles.radiusLabel}>
+                <Icon name="radius" size={16} color={colors.primary} />
+                <Text style={styles.radiusText}>Rayon</Text>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chips}
+              >
+                {RADIUS_OPTIONS.map((r) => (
+                  <Chip
+                    key={r}
+                    label={formatRadius(r)}
+                    selected={draft.radius === r}
+                    onPress={() => {
+                      draft.setRadius(r);
+                      if (user) showRadius(user, r);
+                    }}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          <View style={styles.panelHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.panelTitle}>
+                {categories.length === 0
+                  ? "Choisissez une catégorie"
+                  : loading
+                    ? "Recherche…"
+                    : `${results.length} commerce${results.length > 1 ? "s" : ""}`}
+              </Text>
+              {picking && chosen.length > 0 && (
+                <Text style={styles.panelSub}>
+                  {chosen.length} choisi{chosen.length > 1 ? "s" : ""} sur{" "}
+                  {MAX_PLACES}
+                </Text>
+              )}
+            </View>
+
+            <Pressable
+              onPress={searchHere}
+              disabled={loading}
+              style={styles.searchButton}
+            >
+              {loading ? (
+                <ActivityIndicator color={colors.primary} size="small" />
+              ) : (
+                <>
+                  <Icon name="search" size={14} color={colors.primary} />
+                  <Text style={styles.link}>Chercher ici</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+
+          {locationError && <Text style={styles.error}>{locationError}</Text>}
+          {error && <Text style={styles.error}>{error}</Text>}
+          {categories.length === 0 && (
+            <Text style={styles.hint}>
+              Touchez une catégorie en haut de l&apos;écran pour afficher les
+              commerces autour de vous.
+            </Text>
+          )}
+          {searched && !loading && results.length === 0 && (
+            <Text style={styles.hint}>
+              Aucun commerce trouvé ici : déplacez la carte pour explorer
+              d&apos;autres zones.
+            </Text>
+          )}
+
+          {results.length > 0 && (
+            <ScrollView style={{ maxHeight: 210 }}>
+              <PlaceList
+                places={results}
+                selectedIds={chosenIds}
+                onSelect={(p) => {
+                  focusOn(p);
+                  togglePlace(p);
+                }}
+              />
+            </ScrollView>
+          )}
+
+          {picking && (
+            <Button
+              title={
+                chosen.length > 0 ? `Valider (${chosen.length})` : "Valider"
+              }
+              icon="check"
+              onPress={() => router.back()}
+              style={{ marginTop: spacing.md }}
+            />
+          )}
+        </View>
       </View>
     </View>
   );
@@ -511,99 +589,135 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    gap: 12,
+    backgroundColor: colors.background,
+  },
+  loadingIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.primarySoft,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
   },
   topBar: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    paddingTop: 55,
-    paddingBottom: 10,
+    gap: 10,
+    paddingBottom: 6,
+  },
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.92)",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
   },
-  closeButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "#F2F2F7",
+  roundButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.surface,
     justifyContent: "center",
     alignItems: "center",
-    marginHorizontal: 12,
+    ...shadow(2),
   },
-  closeText: { fontSize: 16, fontWeight: "bold" },
-  chips: { gap: 8, paddingRight: 16 },
+  titlePill: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    ...shadow(2),
+  },
+  titleText: { fontSize: 15, fontWeight: "700", color: colors.text },
+  chips: { gap: 8, paddingHorizontal: spacing.lg, paddingVertical: 4 },
+  bottom: { position: "absolute", left: 0, right: 0, bottom: 0 },
   locateButton: {
-    position: "absolute",
-    right: 16,
-    bottom: 330,
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: "#FFFFFF",
+    alignSelf: "flex-end",
+    marginRight: spacing.lg,
+    marginBottom: spacing.md,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.surface,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    ...shadow(2),
   },
   panel: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    padding: 16,
-    paddingBottom: 34,
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
+    paddingHorizontal: spacing.lg,
+    paddingTop: 10,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    ...shadow(3),
+  },
+  handle: {
+    alignSelf: "center",
+    width: 40,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: colors.border,
+    marginBottom: 14,
   },
   radiusRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: 12,
+    marginBottom: 14,
+    marginHorizontal: -spacing.lg,
+    paddingLeft: spacing.lg,
   },
-  radiusLabel: { fontSize: 14, fontWeight: "600" },
+  radiusLabel: { flexDirection: "row", alignItems: "center", gap: 6 },
+  radiusText: { fontSize: 14, fontWeight: "700", color: colors.text },
   panelHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  panelTitle: { fontSize: 15, fontWeight: "700", flex: 1 },
-  link: { color: "#5B4BDB", fontWeight: "600" },
-  hint: { fontSize: 13, color: "#777777", marginTop: 8 },
-  error: { fontSize: 13, color: "#D64545", marginBottom: 8 },
-  validate: {
-    height: 50,
-    backgroundColor: "#5B4BDB",
-    borderRadius: 10,
-    justifyContent: "center",
+  panelTitle: { ...font.heading, color: colors.text },
+  panelSub: { fontSize: 13, color: colors.success, fontWeight: "600", marginTop: 2 },
+  searchButton: {
+    flexDirection: "row",
     alignItems: "center",
-    marginTop: 12,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
   },
-  validateText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
+  link: { color: colors.primary, fontWeight: "700", fontSize: 13 },
+  hint: { fontSize: 14, color: colors.textMuted, lineHeight: 20 },
+  error: { fontSize: 13, color: colors.danger, marginBottom: 8 },
   selectedCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     padding: 12,
-    marginBottom: 12,
+    marginBottom: 14,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+  },
+  selectedEmoji: {
+    width: 42,
+    height: 42,
     borderRadius: 12,
-    backgroundColor: "#F2F0FF",
+    backgroundColor: colors.surface,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  selectedName: { fontSize: 15, fontWeight: "700" },
-  hintInline: { fontSize: 13, color: "#777777", marginTop: 2 },
+  selectedName: { fontSize: 15, fontWeight: "700", color: colors.text },
+  hintInline: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
   goButton: {
-    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: "#5B4BDB",
+    borderRadius: radius.sm,
+    backgroundColor: colors.primary,
   },
-  goText: { color: "#FFFFFF", fontWeight: "bold" },
-  dismiss: { fontSize: 16, color: "#777777" },
+  goText: { color: colors.onPrimary, fontWeight: "700" },
 });

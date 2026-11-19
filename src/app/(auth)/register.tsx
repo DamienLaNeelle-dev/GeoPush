@@ -1,17 +1,14 @@
 import { useState } from "react";
 
-import {
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Alert, Pressable, StyleSheet, Text } from "react-native";
 
 import { useRouter } from "expo-router";
-import { register } from "../../services/auth/authService";
+
+import { AuthScreen } from "@/components/ui/auth-screen";
+import { Button } from "@/components/ui/button";
+import { TextField } from "@/components/ui/text-field";
+import { colors } from "@/constants/ui";
+import { register } from "@/services/auth/authService";
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -56,83 +53,54 @@ export default function RegisterScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Créer un compte</Text>
-
-      <Text style={styles.subtitle}>Rejoignez notre application</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Adresse email"
+    <AuthScreen
+      title="Créer un compte"
+      subtitle="Quelques secondes et vos rappels vous suivent partout."
+      footer={
+        <Pressable onPress={() => router.replace("/login")} hitSlop={8}>
+          <Text style={styles.footerText}>
+            Déjà un compte ? <Text style={styles.footerLink}>Se connecter</Text>
+          </Text>
+        </Pressable>
+      }
+    >
+      <TextField
+        label="Adresse email"
+        icon="mail"
+        placeholder="exemple@email.com"
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
         autoCapitalize="none"
         autoCorrect={false}
+        autoComplete="email"
+        textContentType="emailAddress"
       />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Mot de passe"
+      <TextField
+        label="Mot de passe"
+        icon="lock"
+        placeholder="6 caractères minimum"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
+        autoComplete="new-password"
+        textContentType="newPassword"
+        returnKeyType="go"
+        onSubmitEditing={handleRegister}
       />
 
-      <TouchableOpacity style={styles.button} onPress={handleRegister} disabled={loading}>
-        {loading ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <Text style={styles.buttonText}>S'inscrire</Text>
-        )}
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={() => router.replace("/login")}>
-        <Text style={styles.link}>Déjà un compte ? Se connecter</Text>
-      </TouchableOpacity>
-    </View>
+      <Button
+        title="Créer mon compte"
+        onPress={handleRegister}
+        loading={loading}
+        style={{ marginTop: 8 }}
+      />
+    </AuthScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    padding: 25,
-    backgroundColor: "#FFFFFF",
-  },
-  title: {
-    fontSize: 30,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: "#777777",
-    marginBottom: 35,
-  },
-  input: {
-    height: 55,
-    borderWidth: 1,
-    borderColor: "#DDDDDD",
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    marginBottom: 20,
-  },
-  button: {
-    height: 55,
-    backgroundColor: "#5B4BDB",
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  buttonText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-  },
-  link: {
-    color: "#5B4BDB",
-    textAlign: "center",
-    marginTop: 25,
-  },
+  footerText: { fontSize: 15, color: colors.textMuted },
+  footerLink: { color: colors.primary, fontWeight: "700" },
 });

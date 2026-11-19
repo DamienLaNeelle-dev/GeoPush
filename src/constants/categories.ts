@@ -1,18 +1,21 @@
 // Catégories de commerces proposables pour un rappel "à proximité".
 // `osm` = le tag OpenStreetMap qu'on utilisera plus tard avec Overpass.
 export const CATEGORIES = [
-  { key: "bakery", label: "Boulangerie", osm: "shop=bakery" },
-  { key: "supermarket", label: "Supermarché", osm: "shop=supermarket" },
-  { key: "convenience", label: "Supérette", osm: "shop=convenience" },
-  { key: "pharmacy", label: "Pharmacie", osm: "amenity=pharmacy" },
-  { key: "butcher", label: "Boucherie", osm: "shop=butcher" },
-  { key: "greengrocer", label: "Primeur", osm: "shop=greengrocer" },
+  { key: "bakery", label: "Boulangerie", emoji: "🥖", osm: "shop=bakery" },
+  { key: "supermarket", label: "Supermarché", emoji: "🛒", osm: "shop=supermarket" },
+  { key: "convenience", label: "Supérette", emoji: "🏪", osm: "shop=convenience" },
+  { key: "pharmacy", label: "Pharmacie", emoji: "💊", osm: "amenity=pharmacy" },
+  { key: "butcher", label: "Boucherie", emoji: "🥩", osm: "shop=butcher" },
+  { key: "greengrocer", label: "Primeur", emoji: "🥦", osm: "shop=greengrocer" },
 ] as const;
 
 export type CategoryKey = (typeof CATEGORIES)[number]["key"];
 
 export const getCategoryLabel = (key: CategoryKey | null): string =>
   CATEGORIES.find((c) => c.key === key)?.label ?? "";
+
+export const getCategoryEmoji = (key: CategoryKey | null): string =>
+  CATEGORIES.find((c) => c.key === key)?.emoji ?? "📍";
 
 export const getCategoryLabels = (keys: CategoryKey[]): string =>
   keys.map((k) => getCategoryLabel(k)).join(", ");
