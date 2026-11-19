@@ -65,11 +65,13 @@ export function Button({
       onPress={onPress}
       disabled={inactive}
       accessibilityRole="button"
+      accessibilityState={{ disabled: inactive }}
       style={({ pressed }) => [
         styles.base,
-        variant === "primary" && shadow(2),
+        variant === "primary" && !disabled && shadow(2),
         { backgroundColor: pressed ? v.pressed : v.background },
-        inactive && styles.inactive,
+        loading && styles.loading,
+        disabled && styles.disabled,
         style,
       ]}
     >
@@ -77,8 +79,21 @@ export function Button({
         <ActivityIndicator color={v.text} />
       ) : (
         <>
-          {icon && <Icon name={icon} size={18} color={v.text} />}
-          <Text style={[styles.text, { color: v.text }]}>{title}</Text>
+          {icon && (
+            <Icon
+              name={icon}
+              size={18}
+              color={disabled ? colors.textSubtle : v.text}
+            />
+          )}
+          <Text
+            style={[
+              styles.text,
+              { color: disabled ? colors.textSubtle : v.text },
+            ]}
+          >
+            {title}
+          </Text>
         </>
       )}
     </Pressable>
@@ -95,6 +110,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
   },
-  inactive: { opacity: 0.6 },
+  loading: { opacity: 0.7 },
+  // Désactivé : gris, pour qu'on ne le confonde pas avec un bouton actif
+  disabled: { backgroundColor: colors.surfaceMuted },
   text: { fontSize: 16, fontWeight: "700" },
 });

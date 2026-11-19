@@ -85,23 +85,29 @@ export default function ReminderFormScreen() {
       params: { mode: "pick" },
     });
 
+  // Le bouton n'est actif que si le rappel est complet : un titre, au moins
+  // un commerce précis (une catégorie seule ne suffit pas) et un rayon.
+  // Le rayon vaut 500 m par défaut, donc il est toujours renseigné.
+  // Un commerce ne compte que s'il appartient à une catégorie cochée
+  const validPlaces = chosenPlaces.filter((p) =>
+    categories.includes(p.category),
+  );
+  const missing: string[] = [];
+  if (!title.trim()) missing.push("un titre");
+  if (validPlaces.length === 0) missing.push("au moins un commerce");
+  if (!radius) missing.push("une distance");
+  const canSubmit = missing.length === 0;
+
   const handleSave = () => {
-    if (!title.trim()) {
-      Alert.alert("Erreur", "Donnez un titre à votre rappel.");
-      return;
-    }
-    if (categories.length === 0) {
-      Alert.alert(
-        "Erreur",
-        "Ouvrez la carte et choisissez au moins une catégorie de commerce.",
-      );
+    if (!canSubmit) {
+      Alert.alert("Rappel incomplet", `Ajoutez ${missing.join(", ")}.`);
       return;
     }
 
     const input: ReminderInput = {
       title: title.trim(),
       categories,
-      places: chosenPlaces,
+      places: validPlaces,
       radius,
     };
 
@@ -182,7 +188,7 @@ export default function ReminderFormScreen() {
                     ? `${categories.length} catégorie${categories.length > 1 ? "s" : ""} · ${
                         chosenPlaces.length > 0
                           ? `${chosenPlaces.length} commerce${chosenPlaces.length > 1 ? "s" : ""}`
-                          : "tous les commerces proches"
+                          : "aucun commerce choisi"
                       }`
                     : "Types de commerces et lieux précis"}
                 </Text>
@@ -264,10 +270,16 @@ export default function ReminderFormScreen() {
 
         {/* Bouton fixé en bas */}
         <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
+          {!canSubmit && (
+            <Text style={styles.missing}>
+              Pour enregistrer, ajoutez {missing.join(", ")}.
+            </Text>
+          )}
           <Button
             title={isEdit ? "Enregistrer les modifications" : "Créer le rappel"}
             icon="check"
             onPress={handleSave}
+            disabled={!canSubmit}
           />
         </View>
       </KeyboardAvoidingView>
@@ -377,6 +389,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
   },
   placeName: { flex: 1, fontSize: 14, fontWeight: "500", color: colors.text },
+  missing: {
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: "center",
+    marginBottom: spacing.sm,
+  },
   footer: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
