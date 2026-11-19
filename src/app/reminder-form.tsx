@@ -13,11 +13,19 @@ import {
 } from "react-native";
 
 import { Chip } from "@/components/chip";
-import { MAX_PLACES, RADIUS_OPTIONS, formatRadius, getCategoryLabels } from "@/constants/categories";
+import {
+  MAX_PLACES,
+  RADIUS_OPTIONS,
+  formatRadius,
+  getCategoryLabels,
+} from "@/constants/categories";
 import { useAuth } from "@/context/AuthContext";
 import { useReminderDraft } from "@/context/ReminderDraftContext";
 import { useReminders } from "@/hooks/use-reminders";
-import { createReminder, updateReminder } from "@/services/reminders/reminderService";
+import {
+  createReminder,
+  updateReminder,
+} from "@/services/reminders/reminderService";
 import { ReminderInput } from "@/types/reminder";
 
 export default function ReminderFormScreen() {
@@ -27,7 +35,8 @@ export default function ReminderFormScreen() {
   const { reminders } = useReminders();
 
   // Catégories et commerces choisis : stockés dans le brouillon, car c'est la carte qui les modifie.
-  const { categories, chosenPlaces, setCategories, setChosenPlaces, reset } = useReminderDraft();
+  const { categories, chosenPlaces, setCategories, setChosenPlaces, reset } =
+    useReminderDraft();
 
   const isEdit = !!id;
 
@@ -59,7 +68,10 @@ export default function ReminderFormScreen() {
   }
 
   const openMap = () =>
-    router.push({ pathname: "/place-map", params: { mode: "pick" } });
+    router.push({
+      pathname: "/place-map",
+      params: { mode: "pick", editId: id ?? "" },
+    });
 
   const handleSave = () => {
     if (!title.trim()) {
@@ -67,7 +79,10 @@ export default function ReminderFormScreen() {
       return;
     }
     if (categories.length === 0) {
-      Alert.alert("Erreur", "Ouvrez la carte et choisissez au moins une catégorie de commerce.");
+      Alert.alert(
+        "Erreur",
+        "Ouvrez la carte et choisissez au moins une catégorie de commerce.",
+      );
       return;
     }
 
@@ -81,7 +96,9 @@ export default function ReminderFormScreen() {
     // On ne bloque pas l'écran en attendant le serveur : la liste se met à jour
     // tout de suite, et une erreur éventuelle est affichée si elle arrive.
     const request =
-      isEdit && id ? updateReminder(user.uid, id, input) : createReminder(user.uid, input);
+      isEdit && id
+        ? updateReminder(user.uid, id, input)
+        : createReminder(user.uid, input);
 
     request.catch((e) => Alert.alert("Enregistrement impossible", e.message));
     router.back();
@@ -92,7 +109,10 @@ export default function ReminderFormScreen() {
       style={{ flex: 1, backgroundColor: "#FFFFFF" }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={styles.screenTitle}>
           {isEdit ? "Modifier le rappel" : "Nouveau rappel"}
         </Text>
@@ -107,9 +127,10 @@ export default function ReminderFormScreen() {
 
         <Text style={styles.label}>Où vous le rappeler ?</Text>
         <Text style={styles.hint}>
-          Ouvrez la carte, choisissez les types de commerces (boulangerie, boucherie…), puis
-          touchez les commerces à surveiller. Sans commerce précis, tous ceux des catégories
-          choisies autour de vous seront surveillés.
+          Ouvrez la carte, choisissez les types de commerces (boulangerie,
+          boucherie…), puis touchez les commerces à surveiller. Sans commerce
+          précis, tous ceux des catégories choisies autour de vous seront
+          surveillés.
         </Text>
 
         <TouchableOpacity style={styles.mapButton} onPress={openMap}>
@@ -117,9 +138,13 @@ export default function ReminderFormScreen() {
         </TouchableOpacity>
 
         {categories.length > 0 ? (
-          <Text style={styles.summary}>Catégories : {getCategoryLabels(categories)}</Text>
+          <Text style={styles.summary}>
+            Catégories : {getCategoryLabels(categories)}
+          </Text>
         ) : (
-          <Text style={styles.hint}>Aucune catégorie choisie pour le moment.</Text>
+          <Text style={styles.hint}>
+            Aucune catégorie choisie pour le moment.
+          </Text>
         )}
 
         {chosenPlaces.length > 0 && (
@@ -127,14 +152,18 @@ export default function ReminderFormScreen() {
             <Text style={styles.label}>
               Commerces choisis ({chosenPlaces.length}/{MAX_PLACES})
             </Text>
-            <Text style={styles.hint}>Touchez un commerce pour le retirer.</Text>
+            <Text style={styles.hint}>
+              Touchez un commerce pour le retirer.
+            </Text>
             <View style={styles.row}>
               {chosenPlaces.map((p) => (
                 <Chip
                   key={p.id}
                   label={`${p.name}  ✕`}
                   selected
-                  onPress={() => setChosenPlaces(chosenPlaces.filter((x) => x.id !== p.id))}
+                  onPress={() =>
+                    setChosenPlaces(chosenPlaces.filter((x) => x.id !== p.id))
+                  }
                 />
               ))}
             </View>
