@@ -1,14 +1,22 @@
 import { Stack } from "expo-router";
-import { useEffect } from "react";
+import { ReactNode, useEffect } from "react";
 import { ActivityIndicator, AppState, View } from "react-native";
 
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ReminderDraftProvider } from "@/context/ReminderDraftContext";
-import { PermissionsGate } from "@/components/permissions-gate";
+import {
+  PermissionGate,
+  PermissionItem,
+} from "@/components/labo/PermissionGate";
+import { useAppPermissions } from "@/hooks/use-app-permissions";
 import { useNotificationRedirect } from "@/hooks/use-notification-redirect";
 import { useReminders } from "@/hooks/use-reminders";
 import "@/notifications";
 import { syncGeofences } from "@/services/location/geofencingService";
+import {
+  PERMISSION_ORDER,
+  PermissionKey,
+} from "@/services/permissions/permissionsService";
 import "@/tasks/geofencingTask";
 
 function GeofencingSync() {
@@ -36,6 +44,48 @@ function GeofencingSync() {
   }, [authLoading, error, loading, reminders, user]);
 
   return null;
+}
+
+// Position, position en arrière-plan et notifications : demandées au lancement,
+// redemandées tant qu'elles ne sont pas toutes accordées.
+const PERMISSION_LABELS: Record<
+  PermissionKey,
+  { label: string; description: string }
+> = {
+  location: {
+    label: "Position",
+    description: "Pour trouver les commerces autour de vous.",
+  },
+  background: {
+    label: "Position en arrière-plan (« Toujours »)",
+    description:
+      "Pour vous rappeler vos tâches près d'un lieu, même appli fermée.",
+  },
+  notifications: {
+    label: "Notifications",
+    description: "Pour vous prévenir quand vous êtes près d'un lieu.",
+  },
+};
+
+function AppPermissionGate({ children }: { children: ReactNode }) {
+  const { permissions, combined, request, refresh } = useAppPermissions();
+  const items: PermissionItem[] = PERMISSION_ORDER.map((key) => ({
+    ...PERMISSION_LABELS[key],
+    granted: permissions?.[key].granted ?? false,
+  }));
+
+  return (
+    <PermissionGate
+      title="Autorisations nécessaires"
+      message="GeoPush a besoin de ces autorisations pour vous rappeler vos tâches au bon endroit."
+      permission={combined}
+      request={request}
+      refresh={refresh}
+      items={items}
+    >
+      {children}
+    </PermissionGate>
+  );
 }
 
 function RootNavigator() {
@@ -67,10 +117,10 @@ export default function RootLayout() {
     <AuthProvider>
       <ReminderDraftProvider>
         {/* Rien ne démarre tant que les permissions ne sont pas accordées */}
-        <PermissionsGate>
+        <AppPermissionGate>
           <GeofencingSync />
           <RootNavigator />
-        </PermissionsGate>
+        </AppPermissionGate>
       </ReminderDraftProvider>
     </AuthProvider>
   );
