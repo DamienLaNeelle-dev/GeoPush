@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -39,6 +41,7 @@ const METERS_PER_DEGREE = 111320;
 const SEARCH_DEBOUNCE = 600; // ms d'attente après la fin du déplacement de la carte
 const MIN_RADIUS = 500;
 const MAX_RADIUS = 5000;
+const PANEL_PEEK = 64; // hauteur du panneau restant visible une fois baissé
 
 // Rayon de recherche déduit du zoom : la moitié de la zone visible, arrondi à 250 m.
 const radiusFromRegion = (r: Region): number => {
@@ -109,6 +112,58 @@ export default function PlaceMapScreen() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const categoriesRef = useRef<CategoryKey[]>(categories); // valeur à jour dans les callbacks
   categoriesRef.current = categories;
+
+  // Panneau du bas : on peut le baisser (glisser vers le bas) puis le remonter.
+  // translateY = 0 : panneau ouvert ; translateY = collapsedOffset : panneau baissé.
+  const [panelY] = useState(() => new Animated.Value(0));
+  const [panelHeight, setPanelHeight] = useState(0);
+  const [collapsed, setCollapsed] = useState(false);
+  const collapsedOffset = Math.max(
+    0,
+    panelHeight - PANEL_PEEK - insets.bottom,
+  );
+  const setPanelCollapsed = useCallback(
+    (value: boolean) => {
+      setCollapsed(value);
+      Animated.spring(panelY, {
+        toValue: value ? collapsedOffset : 0,
+        useNativeDriver: true,
+        bounciness: 0,
+        speed: 14,
+      }).start();
+    },
+    [collapsedOffset, panelY],
+  );
+
+  // Recréé quand l'état du panneau change (jamais pendant un geste)
+  const panResponder = useMemo(() => {
+    const start = collapsed ? collapsedOffset : 0;
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
+      onPanResponderGrant: () => panelY.stopAnimation(),
+      onPanResponderMove: (_, g) => {
+        panelY.setValue(Math.min(collapsedOffset, Math.max(0, start + g.dy)));
+      },
+      onPanResponderRelease: (_, g) => {
+        // Simple appui sur la poignée : on bascule
+        if (Math.abs(g.dy) < 5) {
+          setPanelCollapsed(!collapsed);
+          return;
+        }
+        const pos = start + g.dy;
+        setPanelCollapsed(
+          g.vy > 0.5 || (g.vy > -0.5 && pos > collapsedOffset / 2),
+        );
+      },
+      onPanResponderTerminate: () => setPanelCollapsed(collapsed),
+    });
+  }, [collapsed, collapsedOffset, panelY, setPanelCollapsed]);
+
+  // Si le contenu du panneau change de taille alors qu'il est baissé, on le garde baissé.
+  useEffect(() => {
+    if (collapsed) panelY.setValue(collapsedOffset);
+  }, [collapsed, collapsedOffset, panelY]);
 
   // Lance une recherche autour du centre de la carte et mémorise où on a cherché.
   const runSearch = useCallback(
@@ -296,6 +351,7 @@ export default function PlaceMapScreen() {
   const togglePlace = (place: Place) => {
     const { distance, ...saved } = place;
     setSelected(saved);
+    if (collapsed) setPanelCollapsed(false); // on remonte pour afficher « Y aller »
     if (!picking) return;
 
     if (chosenIds.includes(place.id)) {
@@ -432,7 +488,10 @@ export default function PlaceMapScreen() {
       </View>
 
       {/* Bas de l'écran : bouton de recentrage + panneau */}
-      <View style={styles.bottom} pointerEvents="box-none">
+      <Animated.View
+        style={[styles.bottom, { transform: [{ translateY: panelY }] }]}
+        pointerEvents="box-none"
+      >
         {user && (
           <Pressable
             style={styles.locateButton}
@@ -443,8 +502,24 @@ export default function PlaceMapScreen() {
           </Pressable>
         )}
 
-        <View style={[styles.panel, { paddingBottom: insets.bottom + 16 }]}>
-          <View style={styles.handle} />
+        <View
+          style={[styles.panel, { paddingBottom: insets.bottom + 16 }]}
+          onLayout={(e) => setPanelHeight(e.nativeEvent.layout.height)}
+        >
+          {/* Poignée : glisser vers le bas pour baisser, vers le haut pour remonter */}
+          <View
+            style={styles.handleZone}
+            {...panResponder.panHandlers}
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel={
+              collapsed ? "Remonter le panneau" : "Baisser le panneau"
+            }
+            accessibilityActions={[{ name: "activate" }]}
+            onAccessibilityAction={() => setPanelCollapsed(!collapsed)}
+          >
+            <View style={styles.handle} />
+          </View>
 
           {/* Commerce sélectionné : guidage GPS */}
           {selected && (
@@ -579,7 +654,7 @@ export default function PlaceMapScreen() {
             />
           )}
         </View>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -654,13 +729,19 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius.xl,
     ...shadow(3),
   },
+  // Zone tactile large autour de la poignée
+  handleZone: {
+    marginHorizontal: -spacing.lg,
+    marginTop: -10,
+    paddingTop: 10,
+    paddingBottom: 14,
+    alignItems: "center",
+  },
   handle: {
-    alignSelf: "center",
     width: 40,
     height: 5,
     borderRadius: 3,
     backgroundColor: colors.border,
-    marginBottom: 14,
   },
   radiusRow: {
     flexDirection: "row",
